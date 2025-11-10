@@ -317,6 +317,9 @@ public static class FmlSerializer
 
     private static void SerializeGroupParameter(StringBuilder sb, GroupParameter parameter)
     {
+        // Output leading hidden tokens (comments before parameter)
+        OutputLeadingHiddenTokens(sb, parameter, string.Empty);
+        
         sb.Append(SerializeParameterMode(parameter.Mode));
         sb.Append(" ");
         sb.Append(parameter.Name);
@@ -326,6 +329,9 @@ public static class FmlSerializer
             sb.Append(" : ");
             sb.Append(parameter.Type);
         }
+        
+        // Output trailing hidden tokens (inline comments after parameter)
+        OutputTrailingHiddenTokens(sb, parameter);
     }
 
     private static void SerializeRule(StringBuilder sb, Rule rule, int indentLevel)
@@ -383,6 +389,9 @@ public static class FmlSerializer
 
     private static void SerializeRuleSource(StringBuilder sb, RuleSource source)
     {
+        // Output leading hidden tokens (comments before source)
+        OutputLeadingHiddenTokens(sb, source, string.Empty);
+        
         sb.Append(source.Context);
 
         if (!string.IsNullOrEmpty(source.Element))
@@ -450,10 +459,16 @@ public static class FmlSerializer
             sb.Append(source.Log);
             sb.Append(")");
         }
+        
+        // Output trailing hidden tokens (inline comments after source)
+        OutputTrailingHiddenTokens(sb, source);
     }
 
     private static void SerializeRuleTarget(StringBuilder sb, RuleTarget target)
     {
+        // Output leading hidden tokens (comments before this target)
+        OutputLeadingHiddenTokens(sb, target, string.Empty);
+        
         // Check if this is an expression-only target (no context/element, just a transform with expression)
         if (string.IsNullOrEmpty(target.Context) && 
             target.Transform != null && 
@@ -477,6 +492,9 @@ public static class FmlSerializer
                 sb.Append(" ");
                 sb.Append(SerializeTargetListMode(target.ListMode.Value));
             }
+            
+            // Output trailing hidden tokens (whitespace/comments after this target)
+            OutputTrailingHiddenTokens(sb, target);
             
             return;
         }
@@ -510,6 +528,9 @@ public static class FmlSerializer
             sb.Append(" ");
             sb.Append(SerializeTargetListMode(target.ListMode.Value));
         }
+        
+        // Output trailing hidden tokens (whitespace/comments after this target)
+        OutputTrailingHiddenTokens(sb, target);
     }
 
     private static void SerializeTransform(StringBuilder sb, Transform transform)
@@ -590,6 +611,9 @@ public static class FmlSerializer
 
     private static void SerializeDependent(StringBuilder sb, RuleDependent dependent, int indentLevel)
     {
+        // Output leading hidden tokens (comments before the 'then')
+        OutputLeadingHiddenTokens(sb, dependent, string.Empty);
+        
         sb.Append(" then");
 
         // Group invocations
@@ -624,6 +648,9 @@ public static class FmlSerializer
 
     private static void SerializeGroupInvocation(StringBuilder sb, GroupInvocation invocation)
     {
+        // Output leading hidden tokens (comments before invocation)
+        OutputLeadingHiddenTokens(sb, invocation, string.Empty);
+        
         sb.Append(invocation.Name);
         sb.Append("(");
 
@@ -637,6 +664,9 @@ public static class FmlSerializer
         }
 
         sb.Append(")");
+        
+        // Output trailing hidden tokens (inline comments after invocation)
+        OutputTrailingHiddenTokens(sb, invocation);
     }
 
     private static void SerializeInvocationParameter(StringBuilder sb, InvocationParameter parameter)

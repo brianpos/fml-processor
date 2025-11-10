@@ -294,6 +294,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         var parameter = new GroupParameter
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Mode = ParseParameterMode(context.parameterMode().GetText()),
             Name = context.ID().GetText()
         };
@@ -405,6 +407,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         var source = new RuleSource
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Context = sourceContext,
             Element = sourceElement
         };
@@ -619,6 +623,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         var invocation = new GroupInvocation
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Name = context.identifier().GetText()
         };
 
