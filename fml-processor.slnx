@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="fml-processor/fml-processor.csproj" />
+  <Project Path="fml-tester/fml-tester.csproj" />
+</Solution>

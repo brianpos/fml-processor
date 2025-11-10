@@ -1,0 +1,441 @@
+/**
+ * Define a grammar called FhirMapper
+ */
+grammar FmlMapping;
+@header {// Disable the warning for CLSCompliant
+#pragma warning disable 3021
+}
+
+// starting point for parsing a mapping file
+// in case we need nested ConceptMaps, we need to have this rule:
+// structureMap : mapId conceptMap* structure* imports* group+
+
+structureMap
+  : metadata*? conceptMapDeclaration*? mapId? structure*? imports*? const*? group+ EOF
+  ;
+
+metadata
+  : METADATA_PREFIX identifier '=' (literal | markdownLiteral | DOUBLE_QUOTED_STRING)?  // value is optional to allow descendant maps to remove values from parents
+  ;
+
+markdownLiteral
+  : TRIPLE_QUOTED_STRING_LITERAL
+  ;
+
+mapId
+  : 'map' url '=' identifier
+  ;
+
+// This one may be problematic?
+url
+  : DELIMITEDIDENTIFIER
+  | STRING
+  | DOUBLE_QUOTED_STRING
+  ;
+
+fml_identifier
+  : IDENTIFIER
+  | DELIMITEDIDENTIFIER
+  | FML_ID
+  ;
+
+structure
+  : 'uses' url structureAlias? 'as' modelMode 
+  ;
+
+structureAlias
+    : 'alias' identifier
+    ;
+
+imports
+	: 'imports' url
+	;
+
+const 
+  : 'let' FML_ID '=' expression ';' // which might just be a literal
+  ;
+
+group
+  : 'group' fml_identifier parameters extends? typeMode? rules
+  ;
+
+rules
+  : '{' rule* '}'
+  ;
+
+typeMode
+  : '<<' groupTypeMode  '>>'
+  ;
+
+extends
+  : 'extends' (FML_ID | IDENTIFIER)
+  ;
+
+parameters
+  : '(' parameter (',' parameter)+ ')'
+  ;
+
+parameter
+  : ('source' | 'target') fml_identifier type?
+  ;
+
+type
+  : ':' identifier
+  ;
+
+rule
+  : ruleContext '->' identifier '.' identifier ruleName? ';'    #mapSimpleCopy
+  | ruleSources ('->' ruleTargets)? dependent? ruleName? ';'    #mapNormalRule
+  ;
+
+// Note that this is different to what is in the old grammar (but consistent with what we've seen)
+ruleName
+  : DOUBLE_QUOTED_STRING
+  // : id // this is the old grammar definition
+  ;
+
+ruleSources
+  : ruleSource (',' ruleSource)*
+  ;
+
+ruleSource
+  : ruleContext sourceType? sourceCardinality? sourceDefault? sourceListMode? alias? whereClause? checkClause? log?
+  ;
+
+ruleTargets
+  : ruleTarget (',' ruleTarget)*
+  ;
+
+sourceType
+  : ':' identifier
+  ;
+
+sourceCardinality
+  : INTEGER '..' upperBound
+  ;
+
+upperBound
+  : INTEGER
+  | '*'
+  ;
+
+ruleContext
+	: identifier ('.' identifier)*
+	;
+
+sourceDefault
+  : 'default' '(' expression ')'
+  | 'default' DOUBLE_QUOTED_STRING      // very old format from original version
+  ;
+
+alias
+  : 'as' identifier
+  ;
+
+whereClause
+  : 'where' '(' expression ')'
+  ;
+
+checkClause
+  : 'check' '(' expression ')'
+  ;
+
+log
+  : 'log' '(' expression ')'
+  ;
+
+dependent
+  : 'then' (fml_invocation (',' fml_invocation)* rules? | rules)
+  ;
+
+ruleTarget
+  : ruleContext ('=' transform)? alias? targetListMode?
+  | '(' expression ')' alias? targetListMode?            // fhirpathShorthand
+  | fml_invocation alias?     // alias is not required when simply invoking a group
+  ;
+
+transform
+  : literal                     // trivial constant transform
+  | ruleContext                 // 'copy' transform
+  | fml_invocation              // other named transforms
+//  | '(' expression ')'        // fhirpath based expressions
+  ;
+
+fml_invocation
+  : identifier '(' fml_paramList? ')'
+  ;
+
+fml_paramList
+  : param (',' param)*
+  ;
+
+param
+  : literal
+  | FML_ID
+  | IDENTIFIER
+  ;
+
+
+groupTypeMode
+    : 'types' | 'type+'
+    ;
+
+sourceListMode
+    : 'first' | 'not_first' | 'last' | 'not_last' | 'only_one'
+    ;
+
+targetListMode
+   : 'first' | 'share' | 'last' | 'single'
+   ;
+
+inputMode
+   : 'source' | 'target'
+   ;
+
+modelMode           // StructureMapModelMode binding
+    : 'source' | 'queried' | 'target' | 'produced'
+    ;
+
+
+conceptMapDeclaration
+  : 'conceptmap' url '{' conceptMapPrefix+ conceptMapCodeMap+ '}'
+  ;
+
+conceptMapPrefix
+  : 'prefix' FML_ID '=' url
+  ;
+
+conceptMapCodeMap
+  : conceptMapSource '-' conceptMapTarget
+  ;
+
+conceptMapSource
+  : FML_ID ':' code
+  ;
+
+conceptMapTarget
+  : FML_ID ':' code
+  ;
+
+code
+  : FML_ID
+  | STRING
+  | DOUBLE_QUOTED_STRING
+  ;
+
+
+/****************************************************************
+    Parser rules from FhirPath
+*****************************************************************/
+
+entireExpression
+        : expression EOF
+        ;
+        
+expression
+        : term                                                      #termExpression
+        | expression '.' invocation                                 #invocationExpression
+        | expression '[' expression ']'                             #indexerExpression
+        | ('+' | '-') expression                                    #polarityExpression
+        | expression ('*' | '/' | 'div' | 'mod') expression         #multiplicativeExpression
+        | expression ('+' | '-' | '&') expression                   #additiveExpression
+        | expression ('is' | 'as') typeSpecifier                    #typeExpression
+        | expression '|' expression                                 #unionExpression
+        | expression ('<=' | '<' | '>' | '>=') expression           #inequalityExpression
+        | expression ('=' | '~' | '!=' | '!~') expression           #equalityExpression
+        | expression ('in' | 'contains') expression                 #membershipExpression
+        | expression 'and' expression                               #andExpression
+        | expression ('or' | 'xor') expression                      #orExpression
+        | expression 'implies' expression                           #impliesExpression
+        //| (IDENTIFIER)? '=>' expression                             #lambdaExpression
+        ;
+
+term
+        : invocation                                            #invocationTerm
+        | literal                                               #literalTerm
+        | externalConstant                                      #externalConstantTerm
+        | '(' expression ')'                                    #parenthesizedTerm
+        ;
+
+literal
+        : '{' '}'                                               #nullLiteral
+        | ('true' | 'false')                                    #booleanLiteral
+        | STRING                                                #stringLiteral
+        // Order is different to fhirpath - check that (Qty,long earlier)
+        | quantity                                              #quantityLiteral
+        | LONGNUMBER                                            #longNumberLiteral
+        | NUMBER                                                #numberLiteral
+        | DATE                                                  #dateLiteral
+        | DATETIME                                              #dateTimeLiteral
+        | TIME                                                  #timeLiteral
+        ;
+
+externalConstant
+        : '%' ( identifier | STRING )
+        ;
+
+invocation                          // Terms that can be used after the function/member invocation '.'
+        : identifier                                            #memberInvocation
+        | function                                              #functionInvocation
+        | '$this'                                               #thisInvocation
+        | '$index'                                              #indexInvocation
+        | '$total'                                              #totalInvocation
+        ;
+
+function
+        : identifier '(' paramList? ')'
+        ;
+
+paramList
+        : expression (',' expression)*
+        ;
+
+quantity
+        : NUMBER unit?
+        ;
+
+unit
+        : dateTimePrecision
+        | pluralDateTimePrecision
+        | STRING // UCUM syntax for units of measure
+        ;
+
+dateTimePrecision
+        : 'year' | 'month' | 'week' | 'day' | 'hour' | 'minute' | 'second' | 'millisecond'
+        ;
+
+pluralDateTimePrecision
+        : 'years' | 'months' | 'weeks' | 'days' | 'hours' | 'minutes' | 'seconds' | 'milliseconds'
+        ;
+
+typeSpecifier
+        : qualifiedIdentifier
+        ;
+
+qualifiedIdentifier
+        : identifier ('.' identifier)*
+        ;
+
+identifier
+        : IDENTIFIER
+        | DELIMITEDIDENTIFIER
+        | 'as'
+        | 'contains'
+        | 'in'
+        | 'is'
+        ;
+
+/****************************************************************
+    Lexical rules from FhirPath
+*****************************************************************/
+
+/*
+NOTE: The goal of these rules in the grammar is to provide a date
+token to the parser. As such it is not attempting to validate that
+the date is a correct date, that task is for the parser or interpreter.
+*/
+
+DATE
+    : '@' DATEFORMAT
+    ;
+
+DATETIME
+    : '@' DATEFORMAT 'T' (TIMEFORMAT TIMEZONEOFFSETFORMAT?)?
+    ;
+
+TIME
+    : '@' 'T' TIMEFORMAT
+    ;
+
+fragment DATEFORMAT
+    : [0-9][0-9][0-9][0-9] ('-'[0-9][0-9] ('-'[0-9][0-9])?)?
+    ;
+
+fragment TIMEFORMAT
+    : [0-9][0-9] (':'[0-9][0-9] (':'[0-9][0-9] ('.'[0-9]+)?)?)?
+    ;
+
+fragment TIMEZONEOFFSETFORMAT
+    : ('Z' | ('+' | '-') [0-9][0-9]':'[0-9][0-9])
+    ;
+
+IDENTIFIER
+    : ([A-Za-z] | '_')([A-Za-z0-9] | '_')*            // Added _ to support CQL (FHIR could constrain it out)
+    ;
+
+DELIMITEDIDENTIFIER
+    : '`' (ESC | .)*? '`'
+    ;
+
+STRING
+    : '\'' (ESC | .)*? '\''
+    ;
+
+DOUBLE_QUOTED_STRING
+  : '"' (ESC | .)*? '"'
+  ;
+
+TRIPLE_QUOTED_STRING_LITERAL
+  : '"""' [\r\n] (.)*? [\r\n] '"""' ('\r\n'|'\r'|'\n'|EOF)
+  ;
+
+// Also allows leading zeroes now (just like CQL and XSD)
+// Converted to parser rather than lexer token (kinda)
+NUMBER
+    // : [0-9]+('.' [0-9]+)?
+    : DECIMAL
+    | INTEGER
+    ;
+
+// Juggled order from the fhirpath grammar (so that long integer is before decimal and integer)
+LONGNUMBER
+    : [0-9]+ 'L'
+    ;
+
+DECIMAL
+    : [0-9]* '.' [0-9]+
+    ;
+
+INTEGER
+    : [0-9]+
+    ;
+
+
+
+// Pipe whitespace to the HIDDEN channel to support retrieving source text through the parser.
+WS
+    : [ \r\n\t]+ -> channel(HIDDEN)
+    ;
+
+COMMENT
+        : '/*' .*? '*/' -> channel(HIDDEN)
+        ;
+
+LINE_COMMENT
+        : '//' ~[/] ~[\r\n]* -> channel(HIDDEN)
+        ;
+
+fragment ESC
+        : '\\' (["'\\/fnrt] | UNICODE)    // allow \", \', \\, \/, \f, etc. and \uXXX
+        ;
+
+fragment UNICODE
+        : 'u' HEX HEX HEX HEX
+        ;
+
+fragment HEX
+        : [0-9a-fA-F]
+        ;
+
+/****************************************************************
+    Lexical rules from Fml
+*****************************************************************/
+
+METADATA_PREFIX
+      : '/// '
+      ;
+
+FML_ID
+    : ([A-Za-z])([A-Za-z0-9])*
+    ;
+
