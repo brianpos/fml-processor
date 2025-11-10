@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Metadata declaration (e.g., /// url = 'http://...', /// name = 'MyMap')
 /// </summary>
-public class MetadataDeclaration
+public class MetadataDeclaration : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// The qualified identifier (e.g., 'url', 'name', 'jurisdiction.coding.system')

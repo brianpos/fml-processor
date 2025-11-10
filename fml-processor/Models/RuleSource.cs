@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Source element specification in a rule
 /// </summary>
-public class RuleSource
+public class RuleSource : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Context identifier

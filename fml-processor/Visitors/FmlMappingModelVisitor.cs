@@ -11,11 +11,21 @@ namespace fml_processor.Visitors;
 /// </summary>
 public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
 {
+    private readonly CommonTokenStream _tokenStream;
+    private readonly HashSet<int> _claimedTokenIndexes = new();
+
+    public FmlMappingModelVisitor(CommonTokenStream tokenStream)
+    {
+        _tokenStream = tokenStream ?? throw new ArgumentNullException(nameof(tokenStream));
+    }
+
     public override object? VisitStructureMap([NotNull] FmlMappingParser.StructureMapContext context)
     {
         var structureMap = new FmlStructureMap
         {
-            Position = GetPosition(context)
+            Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetEofHiddenTokens(context) // Special handling for EOF
         };
 
         // Visit metadata declarations
@@ -92,6 +102,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         var metadata = new MetadataDeclaration
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.qualifiedIdentifier().GetText()
         };
 
@@ -181,6 +193,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         return new MapDeclaration
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Url = ExtractString(context.url().GetText()),
             Identifier = context.identifier().GetText()
         };
@@ -191,6 +205,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         var structure = new StructureDeclaration
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Url = ExtractString(context.url().GetText()),
             Mode = ParseStructureMode(context.modelMode().GetText())
         };
@@ -208,6 +224,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         return new ImportDeclaration
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Url = ExtractString(context.url().GetText())
         };
     }
@@ -217,8 +235,10 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         return new ConstantDeclaration
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Name = context.ID().GetText(),
-            Expression = context.fpExpression().GetText()
+            Expression = GetSourceText(context.fpExpression())
         };
     }
 
@@ -227,6 +247,8 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         var group = new GroupDeclaration
         {
             Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Name = context.ID().GetText()
         };
 
@@ -288,7 +310,9 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
     {
         var rule = new Rule
         {
-            Position = GetPosition(context)
+            Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context)
         };
 
         // Parse as a simple source -> target pattern
@@ -328,7 +352,9 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
     {
         var rule = new Rule
         {
-            Position = GetPosition(context)
+            Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context)
         };
 
         // Parse sources
@@ -398,7 +424,7 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
 
         if (context.sourceDefault() != null)
         {
-            source.DefaultValue = context.sourceDefault().GetText();
+            source.DefaultValue = GetSourceText(context.sourceDefault());
         }
 
         if (context.sourceListMode() != null)
@@ -413,17 +439,17 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
 
         if (context.whereClause() != null)
         {
-            source.Condition = context.whereClause().fpExpression().GetText();
+            source.Condition = GetSourceText(context.whereClause().fpExpression());
         }
 
         if (context.checkClause() != null)
         {
-            source.Check = context.checkClause().fpExpression().GetText();
+            source.Check = GetSourceText(context.checkClause().fpExpression());
         }
 
         if (context.log() != null)
         {
-            source.Log = context.log().fpExpression().GetText();
+            source.Log = GetSourceText(context.log().fpExpression());
         }
 
         return source;
@@ -463,7 +489,7 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
                     new TransformParameter
                     {
                         Type = TransformParameterType.Expression,
-                        Value = context.fpExpression().GetText()
+                        Value = GetSourceText(context.fpExpression())
                     }
                 }
             };
@@ -548,7 +574,7 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
             transform.Parameters.Add(new TransformParameter
             {
                 Type = TransformParameterType.Expression,
-                Value = context.fpExpression().GetText()
+                Value = GetSourceText(context.fpExpression())
             });
         }
 
@@ -783,5 +809,155 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
             "single" => TargetListMode.Single,
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Gets the source text for a parser rule context, preserving whitespace.
+    /// This is important for FHIRPath expressions where whitespace matters.
+    /// </summary>
+    private static string GetSourceText(ParserRuleContext context)
+    {
+        if (context == null || context.Start == null || context.Stop == null)
+        {
+            return string.Empty;
+        }
+
+        var inputStream = context.Start.InputStream;
+        if (inputStream == null)
+        {
+            return context.GetText();
+        }
+
+        var startIndex = context.Start.StartIndex;
+        var stopIndex = context.Stop.StopIndex;
+
+        if (startIndex < 0 || stopIndex < 0 || stopIndex < startIndex)
+        {
+            return context.GetText();
+        }
+
+        return inputStream.GetText(new Interval(startIndex, stopIndex));
+    }
+
+    /// <summary>
+    /// Gets hidden tokens (comments, whitespace) that appear before this context.
+    /// Only returns tokens if they differ from what the serializer would output by default.
+    /// Tracks claimed tokens to prevent duplication across parent/child elements.
+    /// </summary>
+    private List<HiddenToken>? GetLeadingHiddenTokens(ParserRuleContext context)
+    {
+        if (context?.Start == null) return null;
+
+        var tokenIndex = context.Start.TokenIndex;
+        if (tokenIndex <= 0) return null;
+
+        // Get all hidden tokens to the left of this token
+        var hiddenTokens = _tokenStream.GetHiddenTokensToLeft(tokenIndex, Lexer.Hidden);
+        if (hiddenTokens == null || hiddenTokens.Count == 0) return null;
+
+        // Convert ANTLR tokens to our HiddenToken model, skipping already claimed tokens
+        var result = new List<HiddenToken>();
+        foreach (IToken token in hiddenTokens)
+        {
+            // Skip if this token was already claimed by another element
+            if (_claimedTokenIndexes.Contains(token.TokenIndex))
+            {
+                continue;
+            }
+
+            // Claim this token
+            _claimedTokenIndexes.Add(token.TokenIndex);
+
+            result.Add(new HiddenToken
+            {
+                TokenType = token.Type,
+                Text = token.Text ?? string.Empty
+            });
+        }
+
+        return result.Count > 0 ? result : null;
+    }
+
+    /// <summary>
+    /// Gets hidden tokens that appear after this context on the same line.
+    /// Stops at newline - tokens after newline become leading tokens for the next element.
+    /// Tracks claimed tokens to prevent duplication.
+    /// </summary>
+    private List<HiddenToken>? GetTrailingHiddenTokens(ParserRuleContext context)
+    {
+        if (context?.Stop == null) return null;
+
+        var tokenIndex = context.Stop.TokenIndex;
+
+        // Get hidden tokens to the right of this token
+        var hiddenTokens = _tokenStream.GetHiddenTokensToRight(tokenIndex, Lexer.Hidden);
+        if (hiddenTokens == null || hiddenTokens.Count == 0) return null;
+
+        // Only include tokens until we hit a newline, and skip already claimed tokens
+        var result = new List<HiddenToken>();
+        foreach (IToken token in hiddenTokens)
+        {
+            var text = token.Text ?? string.Empty;
+            
+            // If token contains newline, don't include it (or anything after)
+            if (text.Contains('\n') || text.Contains('\r'))
+            {
+                break;
+            }
+
+            // Skip if this token was already claimed
+            if (_claimedTokenIndexes.Contains(token.TokenIndex))
+            {
+                continue;
+            }
+
+            // Claim this token
+            _claimedTokenIndexes.Add(token.TokenIndex);
+
+            result.Add(new HiddenToken
+            {
+                TokenType = token.Type,
+                Text = text
+            });
+        }
+
+        return result.Count > 0 ? result : null;
+    }
+
+    /// <summary>
+    /// Gets hidden tokens that appear after the root context (EOF comments/whitespace).
+    /// Unlike GetTrailingHiddenTokens, this captures ALL remaining tokens including those after newlines.
+    /// </summary>
+    private List<HiddenToken>? GetEofHiddenTokens(ParserRuleContext context)
+    {
+        if (context?.Stop == null) return null;
+
+        var tokenIndex = context.Stop.TokenIndex;
+
+        // Get ALL hidden tokens to the right (including after newlines)
+        var hiddenTokens = _tokenStream.GetHiddenTokensToRight(tokenIndex, Lexer.Hidden);
+        if (hiddenTokens == null || hiddenTokens.Count == 0) return null;
+
+        // Include all unclaimed tokens (including comments after newlines)
+        var result = new List<HiddenToken>();
+        foreach (IToken token in hiddenTokens)
+        {
+            // Skip if already claimed
+            if (_claimedTokenIndexes.Contains(token.TokenIndex))
+            {
+                continue;
+            }
+
+            // Claim this token
+            _claimedTokenIndexes.Add(token.TokenIndex);
+
+            result.Add(new HiddenToken
+            {
+                TokenType = token.Type,
+                Text = token.Text ?? string.Empty
+            });
+        }
+
+        return result.Count > 0 ? result : null;
     }
 }

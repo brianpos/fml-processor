@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Group declaration containing transformation rules
 /// </summary>
-public class GroupDeclaration
+public class GroupDeclaration : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Name of the group
@@ -39,12 +35,8 @@ public class GroupDeclaration
 /// <summary>
 /// Parameter for a group
 /// </summary>
-public class GroupParameter
+public class GroupParameter : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Parameter mode: 'source' or 'target'

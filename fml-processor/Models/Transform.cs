@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Transform specification
 /// </summary>
-public class Transform
+public class Transform : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Type of transform

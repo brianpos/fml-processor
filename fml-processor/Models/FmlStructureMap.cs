@@ -4,12 +4,8 @@ namespace fml_processor.Models;
 /// Root structure representing a complete FML StructureMap
 /// Based on the FHIR Mapping Language specification: https://build.fhir.org/mapping-language.html
 /// </summary>
-public class FmlStructureMap
+public class FmlStructureMap : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Metadata declarations (e.g., /// url = '...', /// name = '...')

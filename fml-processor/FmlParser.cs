@@ -91,7 +91,7 @@ public static class FmlParser
             }
             
             // Build the object model using the visitor
-            var visitor = new FmlMappingModelVisitor();
+            var visitor = new FmlMappingModelVisitor(tokenStream);
             var structureMap = visitor.Visit(tree) as FmlStructureMap;
             
             if (structureMap == null)

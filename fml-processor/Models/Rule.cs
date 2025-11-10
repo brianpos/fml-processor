@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Transformation rule
 /// </summary>
-public class Rule
+public class Rule : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Optional name for the rule

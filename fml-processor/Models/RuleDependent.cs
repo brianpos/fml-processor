@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Dependent rules specification
 /// </summary>
-public class RuleDependent
+public class RuleDependent : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Group invocations
@@ -24,12 +20,8 @@ public class RuleDependent
 /// <summary>
 /// Group invocation in a dependent rule
 /// </summary>
-public class GroupInvocation
+public class GroupInvocation : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Name of the group to invoke

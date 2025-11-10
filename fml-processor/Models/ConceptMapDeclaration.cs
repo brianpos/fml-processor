@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Embedded ConceptMap declaration
 /// </summary>
-public class ConceptMapDeclaration
+public class ConceptMapDeclaration : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// URL/identifier of the concept map
@@ -29,12 +25,8 @@ public class ConceptMapDeclaration
 /// <summary>
 /// Prefix declaration within a ConceptMap
 /// </summary>
-public class ConceptMapPrefix
+public class ConceptMapPrefix : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Prefix identifier
@@ -50,12 +42,8 @@ public class ConceptMapPrefix
 /// <summary>
 /// Code mapping within a ConceptMap
 /// </summary>
-public class ConceptMapCodeMap
+public class ConceptMapCodeMap : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Source code specification

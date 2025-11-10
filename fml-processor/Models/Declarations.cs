@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Map declaration (map url = identifier)
 /// </summary>
-public class MapDeclaration
+public class MapDeclaration : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// URL of the map
@@ -24,12 +20,8 @@ public class MapDeclaration
 /// <summary>
 /// Structure definition reference (uses statement)
 /// </summary>
-public class StructureDeclaration
+public class StructureDeclaration : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// URL of the structure definition
@@ -61,12 +53,8 @@ public enum StructureMode
 /// <summary>
 /// Import declaration (imports statement)
 /// </summary>
-public class ImportDeclaration
+public class ImportDeclaration : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// URL of the imported map (may contain wildcards)
@@ -77,12 +65,8 @@ public class ImportDeclaration
 /// <summary>
 /// Constant declaration (let statement)
 /// </summary>
-public class ConstantDeclaration
+public class ConstantDeclaration : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Name of the constant

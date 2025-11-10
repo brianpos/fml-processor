@@ -3,12 +3,8 @@ namespace fml_processor.Models;
 /// <summary>
 /// Target transformation specification in a rule
 /// </summary>
-public class RuleTarget
+public class RuleTarget : FmlNode
 {
-    /// <summary>
-    /// Source position information
-    /// </summary>
-    public SourcePosition? Position { get; set; }
 
     /// <summary>
     /// Context identifier
