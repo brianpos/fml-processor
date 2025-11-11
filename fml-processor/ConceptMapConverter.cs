@@ -28,7 +28,7 @@ public class ConceptMapConverter
 		string? fhirVersion = getFhirVersion(canonical.Version);
 		map.Structures.Add(new StructureDeclaration() 
 		{
-			Url = $"http://hl7.fhir.org/{canonical.Version?.Substring(0,3)}/{resourceType}",
+			Url = $"http://hl7.org/fhir/{canonical.Version?.Substring(0,3)}/StructureDefinition/{resourceType}",
 			Alias = resourceType + fhirVersion,
 			Mode = mode
 		});
@@ -155,6 +155,8 @@ public class ConceptMapConverter
 		
 		// Create a group name based on the source and target types
 		string groupName = $"{PascalCase(sourceName)}_To_{PascalCase(targetName)}";
+		if (PascalCase(sourceName) == PascalCase(targetName))
+			groupName = PascalCase(sourceName);
 		
 		var fmlGroup = new GroupDeclaration
 		{
