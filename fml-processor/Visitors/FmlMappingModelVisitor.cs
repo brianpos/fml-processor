@@ -492,6 +492,7 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
                 {
                     new TransformParameter
                     {
+                        Position = GetPosition(context.fpExpression()),
                         Type = TransformParameterType.Expression,
                         Value = GetSourceText(context.fpExpression())
                     }
@@ -510,6 +511,9 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
                     Type = invocation.Name,
                     Parameters = invocation.Parameters.Select(p => new TransformParameter
                     {
+                        Position = p.Position,
+                        LeadingHiddenTokens = p.LeadingHiddenTokens,
+                        TrailingHiddenTokens = p.TrailingHiddenTokens,
                         Type = p.Type == InvocationParameterType.Literal 
                             ? TransformParameterType.Literal 
                             : TransformParameterType.Identifier,
@@ -544,6 +548,7 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
             transform.Type = TransformType.Copy;
             transform.Parameters.Add(new TransformParameter
             {
+                Position = GetPosition(context.literal()),
                 Type = TransformParameterType.Literal,
                 Value = Visit(context.literal()) ?? string.Empty
             });
@@ -553,6 +558,7 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
             transform.Type = TransformType.Copy;
             transform.Parameters.Add(new TransformParameter
             {
+                Position = GetPosition(context.qualifiedIdentifier()),
                 Type = TransformParameterType.Identifier,
                 Value = context.qualifiedIdentifier().GetText()
             });
@@ -565,6 +571,9 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
                 transform.Type = invocation.Name;
                 transform.Parameters = invocation.Parameters.Select(p => new TransformParameter
                 {
+                    Position = p.Position,
+                    LeadingHiddenTokens = p.LeadingHiddenTokens,
+                    TrailingHiddenTokens = p.TrailingHiddenTokens,
                     Type = p.Type == InvocationParameterType.Literal 
                         ? TransformParameterType.Literal 
                         : TransformParameterType.Identifier,
@@ -577,6 +586,7 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
             transform.Type = TransformType.Evaluate;
             transform.Parameters.Add(new TransformParameter
             {
+                Position = GetPosition(context.fpExpression()),
                 Type = TransformParameterType.Expression,
                 Value = GetSourceText(context.fpExpression())
             });
@@ -649,6 +659,9 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         {
             return new InvocationParameter
             {
+                Position = GetPosition(context),
+                LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+                TrailingHiddenTokens = GetTrailingHiddenTokens(context),
                 Type = InvocationParameterType.Literal,
                 Value = Visit(context.literal()) ?? string.Empty
             };
@@ -657,6 +670,9 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         {
             return new InvocationParameter
             {
+                Position = GetPosition(context),
+                LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+                TrailingHiddenTokens = GetTrailingHiddenTokens(context),
                 Type = InvocationParameterType.Identifier,
                 Value = context.ID().GetText()
             };

@@ -76,7 +76,7 @@ public static class TransformType
 /// <summary>
 /// Parameter for a transform
 /// </summary>
-public class TransformParameter
+public class TransformParameter : FmlNode
 {
     /// <summary>
     /// Type of parameter

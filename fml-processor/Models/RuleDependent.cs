@@ -36,7 +36,7 @@ public class GroupInvocation : FmlNode
 /// <summary>
 /// Parameter for a group invocation
 /// </summary>
-public class InvocationParameter
+public class InvocationParameter : FmlNode
 {
     /// <summary>
     /// Type of parameter
