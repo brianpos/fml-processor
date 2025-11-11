@@ -50,6 +50,12 @@ public class GroupParameter : FmlNode
     /// Optional type identifier
     /// </summary>
     public string? Type { get; set; }
+
+    /// <summary>
+    /// reference to the ElementDefinition (set once StructureDefinitions are resolved)
+    /// (Not part of the parsed content, but injected later during validation)
+    /// </summary>
+    public Hl7.Fhir.Specification.Navigation.ElementDefinitionNavigator? ParameterElementDefinition { get; set; }
 }
 
 /// <summary>
