@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class Rule : FmlNode
 {
-
     /// <summary>
     /// Optional name for the rule
     /// </summary>

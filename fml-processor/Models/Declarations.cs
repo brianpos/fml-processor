@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class MapDeclaration : FmlNode
 {
-
     /// <summary>
     /// URL of the map
     /// </summary>
@@ -22,7 +21,6 @@ public class MapDeclaration : FmlNode
 /// </summary>
 public class StructureDeclaration : FmlNode
 {
-
     /// <summary>
     /// URL of the structure definition
     /// </summary>
@@ -55,7 +53,6 @@ public enum StructureMode
 /// </summary>
 public class ImportDeclaration : FmlNode
 {
-
     /// <summary>
     /// URL of the imported map (may contain wildcards)
     /// </summary>
@@ -67,7 +64,6 @@ public class ImportDeclaration : FmlNode
 /// </summary>
 public class ConstantDeclaration : FmlNode
 {
-
     /// <summary>
     /// Name of the constant
     /// </summary>

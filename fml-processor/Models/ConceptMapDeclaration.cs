@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class ConceptMapDeclaration : FmlNode
 {
-
     /// <summary>
     /// URL/identifier of the concept map
     /// </summary>
@@ -27,7 +26,6 @@ public class ConceptMapDeclaration : FmlNode
 /// </summary>
 public class ConceptMapPrefix : FmlNode
 {
-
     /// <summary>
     /// Prefix identifier
     /// </summary>
@@ -44,7 +42,6 @@ public class ConceptMapPrefix : FmlNode
 /// </summary>
 public class ConceptMapCodeMap : FmlNode
 {
-
     /// <summary>
     /// Source code specification
     /// </summary>

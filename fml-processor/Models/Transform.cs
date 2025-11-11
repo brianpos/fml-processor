@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class Transform : FmlNode
 {
-
     /// <summary>
     /// Type of transform
     /// </summary>

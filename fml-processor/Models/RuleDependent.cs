@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class RuleDependent : FmlNode
 {
-
     /// <summary>
     /// Group invocations
     /// </summary>

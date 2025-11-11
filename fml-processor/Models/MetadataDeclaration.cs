@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class MetadataDeclaration : FmlNode
 {
-
     /// <summary>
     /// The qualified identifier (e.g., 'url', 'name', 'jurisdiction.coding.system')
     /// </summary>

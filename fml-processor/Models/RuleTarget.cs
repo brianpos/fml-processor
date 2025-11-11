@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class RuleTarget : FmlNode
 {
-
     /// <summary>
     /// Context identifier
     /// </summary>

@@ -5,7 +5,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class GroupDeclaration : FmlNode
 {
-
     /// <summary>
     /// Name of the group
     /// </summary>
@@ -37,7 +36,6 @@ public class GroupDeclaration : FmlNode
 /// </summary>
 public class GroupParameter : FmlNode
 {
-
     /// <summary>
     /// Parameter mode: 'source' or 'target'
     /// </summary>

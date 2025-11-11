@@ -6,7 +6,6 @@ namespace fml_processor.Models;
 /// </summary>
 public class FmlStructureMap : FmlNode
 {
-
     /// <summary>
     /// Metadata declarations (e.g., /// url = '...', /// name = '...')
     /// </summary>
