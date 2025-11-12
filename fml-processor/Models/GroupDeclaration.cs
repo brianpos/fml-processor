@@ -72,6 +72,12 @@ public enum ParameterMode
 /// </summary>
 public enum GroupTypeMode
 {
+    /// <summary>
+    /// 'types'
+    /// </summary>
     Types,
-    TypePlus  // 'type+'
+    /// <summary>
+    /// 'type+' TypeAndTypes
+    /// </summary>
+    TypePlus
 }
