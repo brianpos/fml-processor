@@ -160,7 +160,7 @@ public class FmlValidator
 
         var sourceProperties = new FmlStructureDefinitionWalker(sourceType, options.source).Children().Select(c => c.PathName).ToList();
         var targetProperties = new FmlStructureDefinitionWalker(targetType, options.target).Children().Select(c => c.PathName).ToList();
-        var ignoreProps = "id,meta,implicitRules,contained,extension,modifierExtension".Split(',');
+        var ignoreProps = "id,meta,implicitRules,contained,extension,modifierExtension,language,text".Split(',');
         targetProperties.RemoveAll(p => ignoreProps.Contains(p));
 
         // Shuffle all the rules so that the order matches those in the source type's properties

@@ -492,6 +492,6 @@ public class ConceptMapConverter
 	/// </summary>
 	private bool IsInfrastructureElement(string code)
 	{
-		return code is "id" or "extension" or "modifierExtension" or "contained" or "implicitRules" or "meta";
+		return code is "id" or "extension" or "modifierExtension" or "contained" or "implicitRules" or "meta" or "text" or "language";
 	}
 }
