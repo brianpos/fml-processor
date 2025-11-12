@@ -151,6 +151,12 @@ public class FmlValidator
         return issues;
     }
 
+    public static void ReorderGroupRules(List<GroupDeclaration> groups, ValidateMapOptions options)
+    {
+        foreach (var group in groups)
+            ReorderGroupRules(group, options);
+    }
+
     public static void ReorderGroupRules(GroupDeclaration group, ValidateMapOptions options)
     {
         var sourceType = group.Parameters.FirstOrDefault(p => p.Mode == ParameterMode.Source)?.ParameterElementDefinition;
@@ -158,10 +164,32 @@ public class FmlValidator
         if (sourceType == null || targetType == null)
             return;
 
-        var sourceProperties = new FmlStructureDefinitionWalker(sourceType, options.source).Children().Select(c => c.PathName).ToList();
-        var targetProperties = new FmlStructureDefinitionWalker(targetType, options.target).Children().Select(c => c.PathName).ToList();
-        var ignoreProps = "id,meta,implicitRules,contained,extension,modifierExtension,language,text".Split(',');
-        targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+        var sourceProperties = new FmlStructureDefinitionWalker(sourceType, options.source).Children().Select(c => c.PathName.Replace("[x]", "")).ToList();
+        var targetProperties = new FmlStructureDefinitionWalker(targetType, options.target).Children().Select(c => c.PathName.Replace("[x]", "")).ToList();
+
+        // Check the base class if this is a resource type group
+        if (!sourceType.Current.ElementId.Contains("."))
+        {
+            if (group.Extends == "Resource" && sourceType.StructureDefinition.BaseDefinition.StartsWith("http://hl7.org/fhir/StructureDefinition/"))
+            {
+                group.Extends = sourceType.StructureDefinition.BaseDefinition.Replace("http://hl7.org/fhir/StructureDefinition/", "");
+            }
+            if (group.Extends == "Resource")
+            {
+                var ignoreProps = "id,meta,implicitRules,language".Split(',');
+                targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+            }
+            if (group.Extends == "DomainResource")
+            {
+                var ignoreProps = "id,meta,implicitRules,language,text,contained,extension,modifierExtension".Split(',');
+                targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+            }
+        }
+        else
+        {
+            var ignoreProps = "id,extension,modifierExtension".Split(',');
+            targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+        }
 
         // Shuffle all the rules so that the order matches those in the source type's properties
         // While shuffling, also track the properties in the target to ensure that all were mapped to.
@@ -171,7 +199,7 @@ public class FmlValidator
         {
             var propName = sourceProperties.First();
             sourceProperties.RemoveAt(0);
-            var ruleIndex = oldRules.FindIndex(r => r.Sources.Any(s => s.Element == propName));
+            var ruleIndex = oldRules.FindIndex(r => r.Sources.Any(s => s.Element == propName || s.Element == propName));
             if (ruleIndex >= 0)
             {
                 var rule = oldRules[ruleIndex];
@@ -202,16 +230,19 @@ public class FmlValidator
             string comment = "\n\n  // The following target properties were not populated:";
             foreach (var tp in targetProperties)
             {
-                var c = targetProp.Child(tp).Current.Current;
-                var targetTypes = String.Join(",", c.Type?.Select(t => t.Code));
-                comment += $"\n  //    {tp} {targetTypes}[{c.Min}..{c.Max}]";
+                var c = targetProp.Child(tp).Current;
+                var targetTypes = String.Join(",", c.Current?.Type?.Select(t => t.Code));
+                comment += $"\n  //    {tp} {targetTypes}[{c.Current.Min}..{c.Current.Max}]";
             }
-            group.Rules.Last().TrailingHiddenTokens ??= new List<HiddenToken>();
-            group.Rules.Last().TrailingHiddenTokens.Add(new HiddenToken()
+            if (group.Rules.Any())
             {
-                TokenType = FmlMappingLexer.LINE_COMMENT,
-                Text = comment
-            });
+                group.Rules.Last().TrailingHiddenTokens ??= new List<HiddenToken>();
+                group.Rules.Last().TrailingHiddenTokens.Add(new HiddenToken()
+                {
+                    TokenType = FmlMappingLexer.LINE_COMMENT,
+                    Text = comment
+                });
+            }
         }
     }
 
@@ -312,8 +343,8 @@ public class FmlValidator
                 }
 
                 // inject a comment on the rule that shows the type conversions
-                var sourceTypes = String.Join(",", sourceV?.Element?.Current?.Type?.Select(t => t.Code));
-                var targetTypes = String.Join(",", targetV?.Element?.Current?.Type?.Select(t => t.Code));
+                var sourceTypes = String.Join(",", sourceV?.Element?.Current?.Type?.Select(t => t.Code) ?? ["unknown"]);
+                var targetTypes = String.Join(",", targetV?.Element?.Current?.Type?.Select(t => t.Code) ?? ["unknown"]);
                 var ws = new HiddenToken() { TokenType = FmlMappingLexer.LINE_COMMENT, Text = $"  // {sourceTypes}[{sourceV?.Element?.Current?.Min}..{sourceV?.Element?.Current?.Max}] to {targetTypes}[{targetV?.Element?.Current?.Min}..{targetV?.Element?.Current?.Max}]" };
                 rule.TrailingHiddenTokens ??= new List<HiddenToken>();
                 rule.TrailingHiddenTokens.Add(ws);
@@ -778,6 +809,12 @@ public class FmlValidator
                     string msg = $"There is no target type for mapping from {stn} detected @{node.Position?.StartLine}:{node.Position?.StartColumn}";
                     msg += "\n        " + string.Join("\n        ", lookupsForSource);
                     ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
+                    node.TrailingHiddenTokens ??= new List<HiddenToken>();
+                    node.TrailingHiddenTokens.Add(new HiddenToken()
+                    {
+                        TokenType = FmlMappingLexer.LINE_COMMENT,
+                        Text = $"  // No mapping found from {stn.Replace("http://hl7.org/fhir/StructureDefinition/", "")} to {String.Join(",", targetTypeNames.Select(ttn => $"{ttn.Replace("http://hl7.org/fhirpath/", "").Replace("http://hl7.org/fhir/StructureDefinition/", "").Replace("|6.0.0-ballot3", "")}"))}"
+                    });
                 }
             }
         }
