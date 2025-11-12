@@ -3,19 +3,15 @@
 //     Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // </copyright>
 
+using fml_processor;
 using fml_processor.Models;
-// using Microsoft.Health.Fhir.CodeGenCommon.Extensions;
-// using Hl7.Fhir.FhirPath.Validator;
-using Hl7.Fhir.Introspection;
 using Hl7.Fhir.Model;
-using Hl7.Fhir.Model.CdsHooks;
 using Hl7.Fhir.Rest;
 using Hl7.Fhir.Specification.Navigation;
 using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Utility;
 using Hl7.FhirPath;
 using System.Runtime.CompilerServices;
-// using Microsoft.Health.Fhir.CodeGenCommon.Extensions;
 
 namespace Microsoft.Health.Fhir.MappingLanguage;
 
@@ -68,7 +64,7 @@ public class FmlValidator
     }
 
     public static List<OperationOutcome.IssueComponent> VerifyFmlDataTypesForGroup(
-		FmlStructureMap fml,
+        FmlStructureMap fml,
         GroupDeclaration group,
         Dictionary<string, StructureDefinition?> _aliasedTypes, ValidateMapOptions options
         )
@@ -137,7 +133,7 @@ public class FmlValidator
             // Check that the named group exists
             if (!options.namedGroups.ContainsKey(group.Extends!))
             {
-                string msg = $"Unable to extends group `{group.Extends}` in {group.Name} at @{group.Position?.StartLine}:{group.Position?.StartColumn}";
+                string msg = $"Group `extends {group.Extends}` not found in {group.Name} at @{group.Position?.StartLine}:{group.Position?.StartColumn}";
                 ReportIssue(issues, msg, OperationOutcome.IssueType.Duplicate);
             }
 
@@ -155,6 +151,70 @@ public class FmlValidator
         return issues;
     }
 
+    public static void ReorderGroupRules(GroupDeclaration group, ValidateMapOptions options)
+    {
+        var sourceType = group.Parameters.FirstOrDefault(p => p.Mode == ParameterMode.Source)?.ParameterElementDefinition;
+        var targetType = group.Parameters.FirstOrDefault(p => p.Mode == ParameterMode.Target)?.ParameterElementDefinition;
+        if (sourceType == null || targetType == null)
+            return;
+
+        var sourceProperties = new FmlStructureDefinitionWalker(sourceType, options.source).Children().Select(c => c.PathName).ToList();
+        var targetProperties = new FmlStructureDefinitionWalker(targetType, options.target).Children().Select(c => c.PathName).ToList();
+        var ignoreProps = "id,meta,implicitRules,contained,extension,modifierExtension".Split(',');
+        targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+
+        // Shuffle all the rules so that the order matches those in the source type's properties
+        // While shuffling, also track the properties in the target to ensure that all were mapped to.
+        var oldRules = group.Rules.ToList();
+        group.Rules = new List<Rule>();
+        while (sourceProperties.Any())
+        {
+            var propName = sourceProperties.First();
+            sourceProperties.RemoveAt(0);
+            var ruleIndex = oldRules.FindIndex(r => r.Sources.Any(s => s.Element == propName));
+            if (ruleIndex >= 0)
+            {
+                var rule = oldRules[ruleIndex];
+                oldRules.RemoveAt(ruleIndex);
+                group.Rules.Add(rule);
+                // locate the target property, and remove those from the targetProperties list
+                foreach (var ruleTarget in rule.Targets)
+                {
+                    if (targetProperties.Contains(ruleTarget.Element))
+                        targetProperties.Remove(ruleTarget.Element);
+                }
+            }
+        }
+
+        // Append any remaining rules that didn't match a source property
+        if (oldRules.Any())
+        {
+            oldRules.First().LeadingHiddenTokens ??= new List<HiddenToken>();
+            oldRules.First().LeadingHiddenTokens.Add(new HiddenToken() { TokenType = FmlMappingLexer.WS, Text = "\n    // The following rules could not be ordered based on the source structure properties\n" });
+            foreach (var rule in oldRules)
+            {
+                group.Rules.Add(rule);
+            }
+        }
+        if (targetProperties.Any())
+        {
+            var targetProp = new FmlStructureDefinitionWalker(targetType, options.target);
+            string comment = "\n\n  // The following target properties were not populated:";
+            foreach (var tp in targetProperties)
+            {
+                var c = targetProp.Child(tp).Current.Current;
+                var targetTypes = String.Join(",", c.Type?.Select(t => t.Code));
+                comment += $"\n  //    {tp} {targetTypes}[{c.Min}..{c.Max}]";
+            }
+            group.Rules.Last().TrailingHiddenTokens ??= new List<HiddenToken>();
+            group.Rules.Last().TrailingHiddenTokens.Add(new HiddenToken()
+            {
+                TokenType = FmlMappingLexer.LINE_COMMENT,
+                Text = comment
+            });
+        }
+    }
+
     private static void VerifyFmlGroupRule(string prefix, FmlStructureMap fml, GroupDeclaration group, Dictionary<string, StructureDefinition?> _aliasedTypes, ValidateMapOptions options, List<OperationOutcome.IssueComponent> issues, Dictionary<string, PropertyOrTypeDetails?> parameterTypesByName, Rule rule)
     {
         Console.Write(prefix);
@@ -162,15 +222,112 @@ public class FmlValidator
         // deduce the datatypes for the variables
         Dictionary<string, PropertyOrTypeDetails?> parameterTypesByNameForRule = parameterTypesByName.ShallowCopy();
         PropertyOrTypeDetails? singleSourceVariable = null;
-		var sce = rule.SimpleCopyExpression();
-		if (sce == null) // this is really meant to be checking if this is a complex mapping thingo
+        var sce = rule.SimpleCopyExpression();
+        if (sce != null)
+        {
+            PropertyOrTypeDetails? sourceV = null;
+            try
+            {
+                sourceV = ResolveIdentifierType(sce.Source.Identifier(), parameterTypesByNameForRule, sce.Source, issues);
+            }
+            catch (ApplicationException ex)
+            {
+                string msg = $"Can't resolve simple source `{sce.Source}`: {ex.Message}";
+                ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
+            }
+
+            PropertyOrTypeDetails? targetV = null;
+            try
+            {
+                if (sce.Target.Element == null)
+                {
+                    string msg = $"simple target `{sce.Target}`: does not contain an element in context.element @{sce.Target?.Position?.StartLine}:{sce.Target?.Position?.StartColumn}";
+                    ReportIssue(issues, msg, OperationOutcome.IssueType.Value, OperationOutcome.IssueSeverity.Warning);
+                }
+                targetV = ResolveIdentifierType(sce.Target.Identifier(), parameterTypesByNameForRule, sce.Target, issues);
+            }
+            catch (ApplicationException ex)
+            {
+                string msg = $"Can't resolve simple target `{sce.Target}`: {ex.Message}";
+                ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
+            }
+
+            // If these are backbone elements, we should have a `then` rule on it
+            if (rule.Dependent == null && sourceV?.Element?.DebugString()?.Contains("BackboneElement") == true && targetV?.Element?.DebugString()?.Contains("BackboneElement") == true)
+            {
+                // Add in the invocation
+                rule.Dependent = new RuleDependent();
+                rule.Dependent.Invocations = new List<GroupInvocation>();
+
+                string sourceName = ConceptMapConverter.ExtractTypeName(sourceV?.Element?.Current?.ElementId ?? sce.Source.Identifier());
+                string targetName = ConceptMapConverter.ExtractTypeName(targetV?.Element?.Current?.ElementId ?? sce.Target.Identifier());
+
+                // Create a group name based on the source and target types
+                string groupName = $"{ConceptMapConverter.PascalCase(sourceName)}_To_{ConceptMapConverter.PascalCase(targetName)}";
+                if (ConceptMapConverter.PascalCase(sourceName) == ConceptMapConverter.PascalCase(targetName))
+                    groupName = ConceptMapConverter.PascalCase(sourceName);
+
+                sce.Source.Variable = "s";
+                sce.Target.Variable = "t";
+                rule.Dependent.Invocations.Add(new GroupInvocation()
+                {
+                    Name = groupName,
+                    Parameters = [
+                        new InvocationParameter() { Type = InvocationParameterType.Identifier, Value = "s" },
+                        new InvocationParameter() { Type = InvocationParameterType.Identifier, Value = "t" }
+                        ]
+                });
+
+                // Add some whitespace for formatting
+                rule.LeadingHiddenTokens ??= new List<HiddenToken>();
+                rule.LeadingHiddenTokens.Add(new HiddenToken() { TokenType = FmlMappingLexer.WS, Text = "\n  " });
+                rule.Dependent.LeadingHiddenTokens ??= new List<HiddenToken>();
+                rule.Dependent.LeadingHiddenTokens.Add(new HiddenToken() { TokenType = FmlMappingLexer.WS, Text = "\n      " });
+                rule.TrailingHiddenTokens ??= new List<HiddenToken>();
+                rule.TrailingHiddenTokens.Add(new HiddenToken() { TokenType = FmlMappingLexer.WS, Text = "\n" });
+
+                // clear this so that it falls through to the complex processing logic below
+                sce = null;
+            }
+            else
+            {
+                Console.Write($"{sce.Source} : {sourceV?.Element?.DebugString() ?? "?"}");
+                Console.Write($"  -->  ");
+                Console.Write($"{sce.Target} : {targetV?.Element?.DebugString() ?? "?"}");
+
+                // Verify that there exists a map that goes between these types
+                VerifyMapBetweenDatatypes(options.typedGroups, issues, rule, sourceV, targetV);
+
+                // If the source or target is a backbone element, then that shouldn't be a simple rule!
+                if (sourceV?.Element?.Current?.Type.FirstOrDefault()?.Code == "BackboneElement")
+                {
+                    string msg = $"Simple copy not applicable for BackboneElement properties `{sourceV.PropertyPath}` @{rule.Position?.StartLine}:{rule.Position?.StartColumn}";
+                    ReportIssue(issues, msg, OperationOutcome.IssueType.Value);
+                }
+
+                if (!string.IsNullOrEmpty(rule.Name) && !Hl7.Fhir.Model.Id.IsValidValue(rule.Name!))
+                {
+                    string msg = $"Rule name `{rule.Name}` is invalid in {group.Name} at @{rule.Position?.StartLine}:{rule.Position?.StartColumn}";
+                    ReportIssue(issues, msg, OperationOutcome.IssueType.Duplicate);
+                }
+
+                // inject a comment on the rule that shows the type conversions
+                var sourceTypes = String.Join(",", sourceV?.Element?.Current?.Type?.Select(t => t.Code));
+                var targetTypes = String.Join(",", targetV?.Element?.Current?.Type?.Select(t => t.Code));
+                var ws = new HiddenToken() { TokenType = FmlMappingLexer.LINE_COMMENT, Text = $"  // {sourceTypes}[{sourceV?.Element?.Current?.Min}..{sourceV?.Element?.Current?.Max}] to {targetTypes}[{targetV?.Element?.Current?.Min}..{targetV?.Element?.Current?.Max}]" };
+                rule.TrailingHiddenTokens ??= new List<HiddenToken>();
+                rule.TrailingHiddenTokens.Add(ws);
+            }
+        }
+
+        if (sce == null)
         {
             foreach (var source in rule.Sources)
             {
                 if (source != rule.Sources.First())
                     Console.Write(", ");
 
-                Console.Write($"{source.Identifier}");
+                Console.Write($"{source.Identifier()}");
                 PropertyOrTypeDetails? tpV = null;
                 try
                 {
@@ -178,7 +335,7 @@ public class FmlValidator
                 }
                 catch (ApplicationException e)
                 {
-                    string msg = $"Can't resolve type of source identifier `{source.Identifier}`: {e.Message}";
+                    string msg = $"Can't resolve type of source identifier `{source.Identifier()}`: {e.Message}";
                     ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
                 }
 
@@ -207,7 +364,7 @@ public class FmlValidator
                         // including hack around resource type profiles too
                         if (!tpV?.Element?.Current?.Type.Any(t => t.Code == source.Type || isResourceType && t.Code == "Resource") == true)
                         {
-                            string msg = $"Type `{typeName}` is not a valid cast for `{source.Identifier}` in {group.Name} at @{source.Position?.StartLine}:{source.Position?.StartColumn}";
+                            string msg = $"Type `{typeName}` is not a valid cast for `{source.Identifier()}` in {group.Name} at @{source.Position?.StartLine}:{source.Position?.StartColumn}";
                             ReportIssue(issues, msg, OperationOutcome.IssueType.Duplicate);
                         }
 
@@ -301,19 +458,19 @@ public class FmlValidator
                 PropertyOrTypeDetails? tpV = null;
                 if (!string.IsNullOrEmpty(target.Identifier()))
                 {
-                    Console.Write($"{target.Identifier}");
+                    Console.Write($"{target.Identifier()}");
                     try
                     {
                         tpV = ResolveIdentifierType(target.Identifier(), parameterTypesByNameForRule, target, issues);
                         if (!target.Identifier().Contains('.') && target.Transform != null)
                         {
-                            string msg = $"target in copy transform `{target.Identifier}`: must contain both context and element @{target.Position?.StartLine}:{target.Position?.StartColumn}";
+                            string msg = $"target in copy transform `{target.Identifier()}`: must contain both context and element @{target.Position?.StartLine}:{target.Position?.StartColumn}";
                             ReportIssue(issues, msg, OperationOutcome.IssueType.Value, OperationOutcome.IssueSeverity.Warning);
                         }
                     }
                     catch (ApplicationException e)
                     {
-                        string msg = $"Can't resolve type of target identifier `{target.Identifier}`: {e.Message}";
+                        string msg = $"Can't resolve type of target identifier `{target.Identifier()}`: {e.Message}";
                         ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
                     }
                     Console.Write($" : {tpV?.Element?.DebugString() ?? "?"}");
@@ -335,19 +492,19 @@ public class FmlValidator
                     //}
                     if (!string.IsNullOrEmpty(target.Transform.Identifier()))
                     {
-                        Console.Write($" {target.Transform.Identifier}");
+                        Console.Write($" {target.Transform.Identifier()}");
                         try
                         {
                             if (target.Transform.Identifier().Contains('.'))
                             {
-                                string msg = $"source in copy transform `{target.Transform.Identifier}`: cannot contain child properties @{target.Transform.Position?.StartLine}:{target.Transform.Position?.StartColumn} - consider then statement or fhirpath expression";
+                                string msg = $"source in copy transform `{target.Transform.Identifier()}`: cannot contain child properties @{target.Transform.Position?.StartLine}:{target.Transform.Position?.StartColumn} - consider then statement or fhirpath expression";
                                 ReportIssue(issues, msg, OperationOutcome.IssueType.Value, OperationOutcome.IssueSeverity.Warning);
                             }
                             transformedSourceV = ResolveIdentifierType(target.Transform.Identifier()!, parameterTypesByNameForRule, target.Transform, issues);
                         }
                         catch (ApplicationException e)
                         {
-                            string msg = $"Can't resolve type of target transform identifier `{target.Transform.Identifier}`: {e.Message}";
+                            string msg = $"Can't resolve type of target transform identifier `{target.Transform.Identifier()}`: {e.Message}";
                             ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
                         }
 
@@ -410,56 +567,6 @@ public class FmlValidator
             }
         }
 
-		if (sce != null)
-        {
-            PropertyOrTypeDetails? sourceV = null;
-            try
-            {
-                sourceV = ResolveIdentifierType(sce.Source.Identifier(), parameterTypesByNameForRule, sce.Source, issues);
-                Console.Write($"{sce.Source} : {sourceV?.Element?.DebugString() ?? "?"}");
-            }
-            catch (ApplicationException ex)
-            {
-                string msg = $"Can't resolve simple source `{sce.Source}`: {ex.Message}";
-                ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
-            }
-
-            Console.Write($"  -->  ");
-
-            PropertyOrTypeDetails? targetV = null;
-            try
-            {
-                if (sce.Target.Element == null)
-                {
-                    string msg = $"simple target `{sce.Target}`: does not contain an element in context.element @{sce.Target?.Position?.StartLine}:{sce.Target?.Position?.StartColumn}";
-                    ReportIssue(issues, msg, OperationOutcome.IssueType.Value, OperationOutcome.IssueSeverity.Warning);
-                }
-                targetV = ResolveIdentifierType(sce.Target.Identifier(), parameterTypesByNameForRule, sce.Target, issues);
-                Console.Write($"{sce.Target} : {targetV?.Element?.DebugString() ?? "?"}");
-            }
-            catch (ApplicationException ex)
-            {
-                string msg = $"Can't resolve simple target `{sce.Target}`: {ex.Message}";
-                ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
-            }
-
-            // Verify that there exists a map that goes between these types
-            VerifyMapBetweenDatatypes(options.typedGroups, issues, rule, sourceV, targetV);
-
-            // If the source or target is a backbone element, then that shouldn't be a simple rule!
-            if (sourceV?.Element?.Current?.Type.FirstOrDefault()?.Code == "BackboneElement")
-            {
-                string msg = $"Simple copy not applicable for BackboneElement properties `{sourceV.PropertyPath}` @{rule.Position?.StartLine}:{rule.Position?.StartColumn}";
-                ReportIssue(issues, msg, OperationOutcome.IssueType.Value);
-            }
-
-            if (!string.IsNullOrEmpty(rule.Name) && !Hl7.Fhir.Model.Id.IsValidValue(rule.Name!))
-            {
-                string msg = $"Rule name `{rule.Name}` is invalid in {group.Name} at @{rule.Position?.StartLine}:{rule.Position?.StartColumn}";
-                ReportIssue(issues, msg, OperationOutcome.IssueType.Duplicate);
-            }
-        }
-
         // Scan any dependent group calls
         var de = rule.Dependent;
         if (de != null)
@@ -500,7 +607,7 @@ public class FmlValidator
                             // Check in the rule source/target aliases
                             if (rule != null)
                             {
-                                string? variableName = cp.Type.ToString() ?? cp.Value?.ToString();
+                                string? variableName = cp.Type == InvocationParameterType.Identifier ? cp.Value?.ToString() : $"'{cp.Value}'";
                                 if (variableName == null)
                                 {
                                     string msg = $"No Variable name provided for parameter {i} calling dependent group {i.Name} at @{cp.Position?.StartLine}:{cp.Position?.StartColumn}";
@@ -961,56 +1068,56 @@ public class FmlValidator
 
 public static class FmlValidatorExtensions
 {
-	public static string Identifier(this RuleTarget? me) 
-	{
-		return me?.Context + (me?.Element != null ? "." + me?.Element : ""); 
-	}
+    public static string Identifier(this RuleTarget? me)
+    {
+        return me?.Context + (me?.Element != null ? "." + me?.Element : "");
+    }
 
-	public static string Identifier(this RuleSource? me)
-	{
-		return me?.Context + (me?.Element != null ? "." + me?.Element : "");
-	}
+    public static string Identifier(this RuleSource? me)
+    {
+        return me?.Context + (me?.Element != null ? "." + me?.Element : "");
+    }
 
-	/// <summary>
-	/// Simulating the old parsers data
-	/// </summary>
-	public static string Identifier(this Transform me)
-	{
-		return me.Type;
-	}
+    /// <summary>
+    /// Simulating the old parsers data
+    /// </summary>
+    public static string Identifier(this Transform me)
+    {
+        return me.Type;
+    }
 
-	public static SimpleCopyExpression? SimpleCopyExpression(this Rule me)
-	{
-		if (me.Sources.Count == 1 && me.Targets.Count == 1)
-		{
-			var result = new SimpleCopyExpression()
-			{
-				Source = me.Sources[0],
-				Target = me.Targets[0]
-			};
-			if (result.Source.Variable != null || result.Target.Variable != null)
-				return null;
-			if (me.Dependent != null)
-				return null;
-			if (result.Target.Transform != null)
-				return null;
-			if (result.Target.ListMode != null)
-				return null;
-			return result;
-		}
-		return null;
-	}
+    public static SimpleCopyExpression? SimpleCopyExpression(this Rule me)
+    {
+        if (me.Sources.Count == 1 && me.Targets.Count == 1)
+        {
+            var result = new SimpleCopyExpression()
+            {
+                Source = me.Sources[0],
+                Target = me.Targets[0]
+            };
+            if (result.Source.Variable != null || result.Target.Variable != null)
+                return null;
+            if (me.Dependent != null)
+                return null;
+            if (result.Target.Transform != null)
+                return null;
+            if (result.Target.ListMode != null)
+                return null;
+            return result;
+        }
+        return null;
+    }
 
 }
 
 public class SimpleCopyExpression
 {
-	public RuleSource Source { get; set; } = new();
+    public RuleSource Source { get; set; } = new();
 
-	/// <summary>
-	/// Target transformations (optional - rules can have no targets)
-	/// </summary>
-	public RuleTarget Target { get; set; } = new();
+    /// <summary>
+    /// Target transformations (optional - rules can have no targets)
+    /// </summary>
+    public RuleTarget Target { get; set; } = new();
 }
 
 public record ValidateMapOptions

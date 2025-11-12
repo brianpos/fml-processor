@@ -113,14 +113,18 @@ public class ConceptMapConverter
 			if (fmlGroup != null)
 			{
 				structureMap.Groups.Add(fmlGroup);
-			}
-		}
+                // fmlGroup.TypeMode = GroupTypeMode.TypePlus;
+                fmlGroup.Extends = "BackboneElement";
+            }
+        }
 
 		// patch the first group's source/target to use the overall source/target scope aliases
 		if (structureMap.Groups.Count > 0)
 		{
 			var firstGroup = structureMap.Groups[0];
-			if (sourceAlias != null && firstGroup.Parameters.Count > 0)
+            firstGroup.TypeMode = GroupTypeMode.TypePlus;
+            firstGroup.Extends = "Resource";
+            if (sourceAlias != null && firstGroup.Parameters.Count > 0)
 			{
 				firstGroup.Parameters[0].Type = sourceAlias;
 			}
@@ -128,12 +132,12 @@ public class ConceptMapConverter
 			{
 				firstGroup.Parameters[1].Type = targetAlies;
 			}
-		}
+        }
 
 		return structureMap;
 	}
 	
-	private string PascalCase(string input)
+	public static string PascalCase(string input)
 	{
 		if (string.IsNullOrEmpty(input))
 			return input;
@@ -229,8 +233,7 @@ public class ConceptMapConverter
 							TokenType = FmlMappingLexer.LINE_COMMENT,
 							Text = $"  // Renamed"
 						};
-						if (rule.TrailingHiddenTokens == null)
-							rule.TrailingHiddenTokens = new List<HiddenToken>();
+						rule.TrailingHiddenTokens ??= new List<HiddenToken>();
 						rule.TrailingHiddenTokens.Add(ht);
 					}
 
@@ -241,8 +244,7 @@ public class ConceptMapConverter
 							TokenType = FmlMappingLexer.LINE_COMMENT,
 							Text = $"  // {target.Relationship.GetLiteral()}"
 						};
-						if (rule.TrailingHiddenTokens == null)
-							rule.TrailingHiddenTokens = new List<HiddenToken>();
+						rule.TrailingHiddenTokens ??= new List<HiddenToken>();
 						rule.TrailingHiddenTokens.Add(ht);
 					}
 
@@ -274,15 +276,14 @@ public class ConceptMapConverter
 				TokenType = FmlMappingLexer.LINE_COMMENT,
 				Text = "  // No target mapping for "
 			};
-			if (rule.LeadingHiddenTokens == null)
-				rule.LeadingHiddenTokens = new List<HiddenToken>();
+			rule.LeadingHiddenTokens ??= new List<HiddenToken>();
 			rule.LeadingHiddenTokens.Add(ht);
 		}
 
 		return rule;
 	}
 	
-	private string ExtractTypeName(string structureDefinitionUrl)
+	public static string ExtractTypeName(string structureDefinitionUrl)
 	{
 		if (structureDefinitionUrl.StartsWith("http://hl7.org/fhir/StructureDefinition/"))
 		{

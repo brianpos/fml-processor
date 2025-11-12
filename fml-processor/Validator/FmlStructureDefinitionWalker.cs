@@ -114,6 +114,31 @@ namespace Microsoft.Health.Fhir.MappingLanguage
                 throw new Hl7.Fhir.Specification.StructureDefinitionWalkerException($"Child with name '{childName}' is sliced to more than one choice and cannot be used as a discriminator at '{Current.CanonicalPath()}' ");
         }
 
+
+        public IEnumerable<ElementDefinitionNavigator> Children()
+        {
+            var canonicals = Current.Current.Type.Select(t => t.GetTypeProfile()).Distinct().ToArray();
+            // if (canonicals.Length > 1)
+            //    throw new Hl7.Fhir.Specification.StructureDefinitionWalkerException($"Cannot determine which child to select, since there are multiple paths leading from here ('{Current.CanonicalPath()}'), use 'ofType()' to disambiguate");
+
+            // Take First(), since we have determined above that there's just one distinct result to expect.
+            // (this will be the case when Type=R
+            var expandedCol = Expand();
+            foreach (var expanded in expandedCol)
+            {
+                var nav = expanded.Current.ShallowCopy();
+
+                if (!nav.MoveToFirstChild()) yield break;
+
+                do
+                {
+                    // if (nav.Current.IsPrimitiveValueConstraint()) continue;      // ignore value attribute
+                    yield return nav.ShallowCopy();
+                }
+                while (nav.MoveToNext());
+            }
+        }
+
         private IEnumerable<ElementDefinitionNavigator> childDefinitions(string? childName = null)
         {
             var canonicals = Current.Current.Type.Select(t => t.GetTypeProfile()).Distinct().ToArray();
