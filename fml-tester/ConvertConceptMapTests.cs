@@ -140,6 +140,7 @@ namespace fml_tester
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/Duration|5.0.0 -> http://hl7.org/fhir/StructureDefinition/Duration|6.0.0-ballot3", null);
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/ElementDefinition|5.0.0 -> http://hl7.org/fhir/StructureDefinition/ElementDefinition|6.0.0-ballot3", null);
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/Expression|5.0.0 -> http://hl7.org/fhir/StructureDefinition/Expression|6.0.0-ballot3", null);
+            typedGroups.Add("http://hl7.org/fhir/StructureDefinition/Extension|5.0.0 -> http://hl7.org/fhir/StructureDefinition/Extension|6.0.0-ballot3", null);
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/ExtendedContactDetail|5.0.0 -> http://hl7.org/fhir/StructureDefinition/ExtendedContactDetail|6.0.0-ballot3", null);
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/HumanName|5.0.0 -> http://hl7.org/fhir/StructureDefinition/HumanName|6.0.0-ballot3", null);
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/Identifier|5.0.0 -> http://hl7.org/fhir/StructureDefinition/Identifier|6.0.0-ballot3", null);
@@ -173,6 +174,10 @@ namespace fml_tester
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/instant|5.0.0 -> http://hl7.org/fhir/StructureDefinition/dateTime|6.0.0-ballot3", null);
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/id|5.0.0 -> http://hl7.org/fhir/StructureDefinition/string|6.0.0-ballot3", null);
             typedGroups.Add("http://hl7.org/fhir/StructureDefinition/Resource|5.0.0 -> http://hl7.org/fhir/StructureDefinition/Resource|6.0.0-ballot3", null);
+
+            namedGroups.Add("Resource", null);
+            namedGroups.Add("DomainResource", null);
+            namedGroups.Add("BackboneElement", null);
 
             foreach (var group in fml.Groups)
             {
