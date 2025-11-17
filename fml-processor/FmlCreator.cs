@@ -86,6 +86,7 @@ public class FmlCreator
         "DeviceRequest.reasonReference -> DeviceRequest.reason",
         "DeviceRequest.code -> DeviceRequest.product",
         "DeviceRequest.priorRequest -> DeviceRequest.replaces",
+        "DeviceRequest.performerType -> tgt.performer",
 
         "DiagnosticReport.imagingStudy -> DiagnosticReport.study",
 
