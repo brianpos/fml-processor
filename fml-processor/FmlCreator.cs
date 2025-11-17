@@ -1,3 +1,4 @@
+using Antlr4.Runtime.Dfa;
 using fml_processor.Models;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Utility;
@@ -18,13 +19,216 @@ public class FmlCreator
     public Dictionary<string, StructureDefinition> Target = new Dictionary<string, StructureDefinition>();
 
     // ResourceType indexed
-    public Dictionary<string, StructureDefinition> SourceResources = new Dictionary<string, StructureDefinition>();
-    public Dictionary<string, StructureDefinition> TargetResources = new Dictionary<string, StructureDefinition>();
+    // public Dictionary<string, StructureDefinition> SourceResources = new Dictionary<string, StructureDefinition>();
+    // public Dictionary<string, StructureDefinition> TargetResources = new Dictionary<string, StructureDefinition>();
 
-    public StringCollection KnownMappings = [
+    public HashSet<string> KnownMappings = [
+        // R4 to R6 specific known mappings
+        "SampledData.period -> SampledData.interval",
+
+        "Appointment.cancelationReason -> Appointment.cancellationReason",
+        "Appointment.reasonCode -> Appointment.reason",
+        "Appointment.reasonReference -> Appointment.reason",
+        "Appointment.comment -> Appointment.note",
+        "Account.partOf -> Account.parent",
+
+        "AuditEvent.period -> AuditEvent.occurred",
+
+        "BiologicallyDerivedProduct.collection.source -> BiologicallyDerivedProduct.collection.sourcePatient",
+        "AdverseEvent.event -> AdverseEvent.code",
+        "AdverseEvent.date -> AdverseEvent.effect",
+        "AdverseEvent.resultingCondition -> AdverseEvent.resultingEffect",
+        "AdverseEvent.suspectEntity.causality.assessment -> AdverseEvent.suspectEntity.causality.assessmentMethod",
+
+        "CareTeam.participant.period -> CareTeam.participant.effective",
+        "CareTeam.reasonCode -> CareTeam.reason",
+        "CareTeam.reasonReference -> CareTeam.reason",
+
+        "CarePlan.activity.reference -> CarePlan.activity.plannedActivityReference",
+
+        "Claim.careTeam.qualification -> Claim.careTeam.specialty",
+
+        "ClaimResponse.item.adjudication.value -> ClaimResponse.item.adjudication.quantity",
+
+        "Communication.reasonCode -> Communication.reason",
+        "Communication.reasonReference -> Communication.reason",
+
+        "CommunicationRequest.reasonCode -> CommunicationRequest.reason",
+        "CommunicationRequest.reasonReference -> CommunicationRequest.reason",
+        "CommunicationRequest.sender -> CommunicationRequest.informationProvider",
+
+        "Composition.relatesTo.code -> Composition.relatesTo.type",
+
+        "ConceptMap.source -> ConceptMap.sourceScope",
+        "ConceptMap.target -> ConceptMap.targetScope",
+        "ConceptMap.group.element.target.dependsOn.property -> ConceptMap.group.element.target.dependsOn.attribute",
+        "ConceptMap.group.unmapped.url -> ConceptMap.group.unmapped.otherMap",
+
+        "Consent.dateTime -> Consent.date",
+        "Consent.patient -> Consent.subject",
+        "Consent.policy -> Consent.policyBasis",
+        "Consent.policy.uri -> Consent.policyBasis.uri",
+        // "Consent.provision.class -> Consent.provision.documentType", // goes to both documentType and resourceType
+
+        "DetectedIssue.patient -> DetectedIssue.subject",
+
+        "Device.deviceName -> Device.name",
+        "Device.deviceName.name -> Device.name.value",
+        "Device.deviceName.type -> Device.name.type",
+        "Device.property.valueQuantity -> Device.property.value",
+        "Device.property.valueCode -> Device.property.value",
+
+        "DeviceDefinition.property.valueQuantity -> DeviceDefinition.property.value",
+        "DeviceDefinition.property.valueCode -> DeviceDefinition.property.value",
+        "DeviceMetric.parent -> DeviceMetric.device",
+
+        "DeviceRequest.reasonCode -> DeviceRequest.reason",
+        "DeviceRequest.reasonReference -> DeviceRequest.reason",
+        "DeviceRequest.code -> DeviceRequest.product",
+        "DeviceRequest.priorRequest -> DeviceRequest.replaces",
+
+        "DiagnosticReport.imagingStudy -> DiagnosticReport.study",
+
+        "DocumentReference.masterIdentifier -> DocumentReference.identifier",
+        // "DocumentReference.content.format -> DocumentReference.content.profile.value", // nested property and why is this a backbone element! should just be a value ticket please...
+
+        "Encounter.participant.individual -> Encounter.participant.actor",
+        "Encounter.period -> Encounter.actualPeriod",
+        "Encounter.hospitalization -> Encounter.admission",
+        "Encounter.hospitalization.preAdmissionIdentifier -> Encounter.admission.preAdmissionIdentifier",
+        "Encounter.hospitalization.origin -> Encounter.admission.origin",
+        "Encounter.hospitalization.admitSource -> Encounter.admission.admitSource",
+        "Encounter.hospitalization.reAdmission -> Encounter.admission.reAdmission",
+        "Encounter.hospitalization.destination -> Encounter.admission.destination",
+        "Encounter.hospitalization.dischargeDisposition -> Encounter.admission.dischargeDisposition",
+        "Encounter.location.physicalType -> Encounter.location.form",
+
+        "EpisodeOfCare.team -> EpisodeOfCare.careTeam",
+        "EpisodeOfCare.diagnosis.role -> EpisodeOfCare.diagnosis.use",
+
+        "ExampleScenario.actor.actorId -> ExampleScenario.actor.key",
+        "ExampleScenario.actor.name -> ExampleScenario.actor.title",
+        "ExampleScenario.instance.name -> ExampleScenario.instance.title",
+        "ExampleScenario.instance.resourceId -> ExampleScenario.instance.key",
+        "ExampleScenario.instance.resourceType -> ExampleScenario.instance.structureType",
+        "ExampleScenario.instance.version.versionId -> ExampleScenario.instance.version.key",
+        "ExampleScenario.process.step.operation.name -> ExampleScenario.process.step.operation.title",
+        "ExampleScenario.instance.containedInstance.resourceId -> ExampleScenario.instance.containedInstance.instanceReference",
+        "ExampleScenario.instance.containedInstance.versionId -> ExampleScenario.instance.containedInstance.versionReference",
+
+        "ExplanationOfBenefit.careTeam.qualification -> ExplanationOfBenefit.careTeam.specialty",
+        "ExplanationOfBenefit.item.adjudication.value -> ExplanationOfBenefit.item.adjudication.quantity",
+
+        "FamilyMemberHistory.reasonCode -> FamilyMemberHistory.reason",
+        "FamilyMemberHistory.reasonReference -> FamilyMemberHistory.reason",
+
+        "GuidanceResponse.reasonCode -> GuidanceResponse.reason",
+        "GuidanceResponse.reasonReference -> GuidanceResponse.reason",
+
+        "HealthcareService.telecom -> HealthcareService.contact",
+        "HealthcareService.availableTime -> HealthcareService.availability", // yes these 3 will need some "massaging"
+        "HealthcareService.notAvailable -> HealthcareService.availability",
+        "HealthcareService.availabilityExceptions -> HealthcareService.availability",
+
+        "ImagingStudy.procedureReference -> ImagingStudy.procedure",
+        "ImagingStudy.procedureCode -> ImagingStudy.procedure",
+        "ImagingStudy.reasonCode -> ImagingStudy.reason",
+        "ImagingStudy.reasonReference -> ImagingStudy.reason",
+
+        "Immunization.reasonCode -> Immunization.reason",
+        "Immunization.reasonReference -> Immunization.reason",
+        "Immunization.reaction.detail -> Immunization.reaction.manifestation",
+
+        "ImplementationGuide.definition.resource.example -> ImplementationGuide.definition.resource.isExample",
+        "ImplementationGuide.manifest.resource.example -> ImplementationGuide.manifest.resource.isExample",
+
+        "Invoice.date -> Invoice.period", // this one is a jira issue for the ballot too
+
+        "Location.telecom -> Location.contact",
+        "Location.physicalType -> Location.form",
+
+        "Medication.form -> Medication.doseForm",
+        "Medication.manufacturer -> Medication.marketingAuthorizationHolder",
+        "Medication.batch -> Medication.instance",
+        "Medication.batch.lotNumber -> Medication.instance.lotNumber",
+        "Medication.batch.expirationDate -> Medication.instance.expirationDate",
+
+        "MedicationAdministration.effective -> MedicationAdministration.occurrence",
+        "MedicationAdministration.reasonCode -> MedicationAdministration.reason",
+        "MedicationAdministration.reasonReference -> MedicationAdministration.reason",
+        "MedicationAdministration.context -> MedicationAdministration.encounter",
+
+        "MedicationDispense.context -> MedicationDispense.encounter",
+
+        "MedicationRequest.reasonCode -> MedicationRequest.reason",
+        "MedicationRequest.reasonReference -> MedicationRequest.reason",
+        "MedicationRequest.dispenseRequest.performer -> MedicationRequest.dispenseRequest.dispenser",
+
+        "MedicationStatement.reasonCode -> MedicationStatement.reason",
+        "MedicationStatement.reasonReference -> MedicationStatement.reason",
+        "MedicationStatement.context -> MedicationStatement.encounter",
+
+        "MedicationRequest.reported -> MedicationRequest.isRecordOfRequest",
+
+        "NutritionOrder.patient -> NutritionOrder.subject",
+        "NutritionOrder.enteralFormula.maxVolumeToDeliver -> NutritionOrder.enteralFormula.maxVolumeToAdminister",
+        "NutritionOrder.enteralFormula.routeofAdministration -> NutritionOrder.enteralFormula.routeOfAdministration",
+
+        "OrganizationAffiliation.telecom -> OrganizationAffiliation.contact",
+
+        "PaymentNotice.provider -> PaymentNotice.reporter",
+        "PaymentReconciliation.paymentAmount -> PaymentReconciliation.amount",
+        "PaymentReconciliation.paymentDate -> PaymentReconciliation.date",
+        "PaymentReconciliation.detail -> PaymentReconciliation.allocation",
+        "PaymentReconciliation.detail.identifier -> PaymentReconciliation.allocation.identifier",
+        "PaymentReconciliation.detail.predecessor -> PaymentReconciliation.allocation.predecessor",
+        "PaymentReconciliation.detail.type -> PaymentReconciliation.allocation.type",
+        "PaymentReconciliation.detail.request -> PaymentReconciliation.allocation.target",
+        "PaymentReconciliation.detail.submitter -> PaymentReconciliation.allocation.submitter",
+        "PaymentReconciliation.detail.response -> PaymentReconciliation.allocation.response",
+        "PaymentReconciliation.detail.date -> PaymentReconciliation.allocation.date",
+        "PaymentReconciliation.detail.responsible -> PaymentReconciliation.allocation.responsible",
+        "PaymentReconciliation.detail.payee -> PaymentReconciliation.allocation.payee",
+        "PaymentReconciliation.detail.amount -> PaymentReconciliation.allocation.amount",
+
+        "PlanDefinition.action.relatedAction.actionId -> PlanDefinition.action.relatedAction.targetId",
+
+        "PractitionerRole.telecom -> PractitionerRole.contact",
+        "PractitionerRole.availableTime -> PractitionerRole.availability", // yes these 3 will need some "massaging"
+        "PractitionerRole.notAvailable -> PractitionerRole.availability",
+        "PractitionerRole.availabilityExceptions -> PractitionerRole.availability",
+
+        "Procedure.performed -> Procedure.occurrence",
+        "Procedure.reasonCode -> Procedure.reason",
+        "Procedure.reasonReference -> Procedure.reason",
+        "Procedure.usedReference -> Procedure.used",
+        "Procedure.usedCode -> Procedure.used",
+        "Procedure.asserter -> Procedure.reported",
+
+        "ResearchSubject.individual -> ResearchSubject.subject",
+
+        "RiskAssessment.reasonCode -> RiskAssessment.reason",
+        "RiskAssessment.reasonReference -> RiskAssessment.reason",
+
+        "ServiceRequest.locationCode -> ServiceRequest.location",
+        "ServiceRequest.locationReference -> ServiceRequest.location",
+        "ServiceRequest.reasonCode -> ServiceRequest.reason",
+        "ServiceRequest.reasonReference -> ServiceRequest.reason",
+
+        "StructureMap.group.rule.dependent.variable -> StructureMap.group.rule.dependent.parameter",
+
+        "Task.reasonCode -> Task.reason",
+        "Task.reasonReference -> Task.reason",
+
+        // R5 to R6 specific known mappings
         "ActorDefinition.derivedFrom -> ActorDefinition.baseDefinition",
 
+        "AdverseEvent.occurrence -> AdverseEvent.effect",
+
         "AllergyIntolerance.lastOccurrence -> AllergyIntolerance.lastReactionOccurrence",
+
+        "AuditEvent.category -> AuditEvent.type",
+        "AuditEvent.code -> AuditEvent.subtype",
 
         "CareTeam.participant.coverage -> CareTeam.participant.effective",
 
@@ -159,7 +363,9 @@ public class FmlCreator
 
             var matchingTe = targetSd.Differential.Element.FirstOrDefault(te =>
                     te.Path.Replace("[x]", "") == se.Path.Replace("[x]", "")
-                    || KnownMappings.Contains($"{se.Path.Replace("[x]", "")} -> {te.Path.Replace("[x]", "")}"));
+                    || KnownMappings.Contains($"{se.Path.Replace("[x]", "")} -> {te.Path.Replace("[x]", "")}")
+                    || KnownMappings.Contains($"{te.Path.Replace("[x]", "")} -> {se.Path.Replace("[x]", "")}") // reverse mapping too (from the previous direction)
+                    );
             if (matchingTe != null)
             {
                 missedTargetElements.Remove(matchingTe);
@@ -337,6 +543,9 @@ public class FmlCreator
             {
                 var targetTypes = String.Join(",", element.Type?.Select(t => t.Code));
                 comment += $"\n  //    {element.Path} {targetTypes}[{element.Min}..{element.Max}]";
+                IEnumerable<string> targetProfiles = element.Type?.SelectMany(t => t.TargetProfile.Select(tp => tp.Replace("http://hl7.org/fhir/StructureDefinition/", ""))) ?? Enumerable.Empty<string>();
+                if (targetProfiles.Any())
+                    comment += $" ({String.Join(",", targetProfiles)})";
             }
             if (group.Rules.Any())
             {
@@ -355,6 +564,9 @@ public class FmlCreator
             {
                 var targetTypes = String.Join(",", element.Type?.Select(t => t.Code));
                 comment += $"\n  //    {element.Path} {targetTypes}[{element.Min}..{element.Max}]";
+                IEnumerable<string> targetProfiles = element.Type?.SelectMany(t => t.TargetProfile.Select(tp => tp.Replace("http://hl7.org/fhir/StructureDefinition/", ""))) ?? Enumerable.Empty<string>();
+                if (targetProfiles.Any())
+                    comment += $" ({String.Join(",", targetProfiles)})";
             }
             if (group.Rules.Any())
             {
@@ -370,17 +582,27 @@ public class FmlCreator
         return fml;
     }
 
+    /// <summary>
+    /// The left hand type is a compatible source to the right hand type.
+    /// </summary>
     private readonly List<(string, string)> compatiblePairs = new List<(string, string)>
         {
-            ("instant", "dateTime"),
-            ("Reference", "CodeableReference"),
             ("CodeableConcept", "CodeableReference"),
             ("Coding", "CodeableConcept"),
             ("date", "dateTime"),
-            ("string", "markdown"),
-            ("url", "uri"),
-            ("string", "CodeableConcept"),
             ("id", "string"),
+            ("instant", "dateTime"),
+            ("markdown", "string"),
+            ("Reference", "CodeableReference"),
+            ("Reference", "canonical"), // is this a legit mapping?
+            ("string", "markdown"),
+            ("string", "Annotation"),
+            ("string", "CodeableConcept"),
+            ("string", "CodeableReference"), // need to select where the string should go, display or text?
+            ("string", "Reference"), // goes into the display property
+            ("unsignedInt", "integer64"),
+            ("uri", "canonical"),
+            ("url", "uri"),
         };
 
     private bool AreTypesCompatible(string sourceTypes, string targetTypes)

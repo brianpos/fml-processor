@@ -15,7 +15,7 @@ namespace fml_tester
     public sealed class RecreateFmlTest
     {
         [TestMethod]
-        public void RecreateSampleResource()
+        public void RecreateR5toR6maps()
         {
             string targetFolder = Path.Combine(Path.GetTempPath(), "FML", "R6-SD");
             if (!Directory.Exists(targetFolder))
@@ -40,7 +40,7 @@ namespace fml_tester
             // Console.WriteLine();
             string resourcesFile = Path.Combine(targetFolder, "profiles-resources.json");
             LoadStructures(ds, fmlCreator.Target, resourcesFile);
-            LoadStructures(ds, fmlCreator.TargetResources, resourcesFile);
+            // LoadStructures(ds, fmlCreator.TargetResources, resourcesFile);
 
             // Load Source Structures
             // Console.WriteLine();
@@ -49,7 +49,103 @@ namespace fml_tester
             // Console.WriteLine();
             resourcesFile = Path.Combine(sourceFolder, "profiles-resources.json");
             LoadStructures(ds, fmlCreator.Source, resourcesFile);
-            LoadStructures(ds, fmlCreator.SourceResources, resourcesFile);
+            // LoadStructures(ds, fmlCreator.SourceResources, resourcesFile);
+
+            Console.WriteLine();
+            var maps = fmlCreator.GenerateMaps();
+
+            Console.WriteLine();
+            foreach (var map in maps)
+            {
+                var fmlText = FmlSerializer.Serialize(map);
+                Console.WriteLine(fmlText);
+            }
+        }
+
+        [TestMethod]
+        public void RecreateR6toR5maps()
+        {
+            string targetFolder = Path.Combine(Path.GetTempPath(), "FML", "R5-SD");
+            if (!Directory.Exists(targetFolder))
+                Directory.CreateDirectory(targetFolder);
+            Console.WriteLine($"Processing target structures in {targetFolder}");
+            string sourceFolder = Path.Combine(Path.GetTempPath(), "FML", "R6-SD");
+            if (!Directory.Exists(sourceFolder))
+                Directory.CreateDirectory(sourceFolder);
+            Console.WriteLine($"Processing source structures in {sourceFolder}");
+
+            FhirJsonPocoDeserializer ds = new FhirJsonPocoDeserializer(new FhirJsonPocoDeserializerSettings()
+            {
+                AnnotateResourceParseExceptions = true,
+                Validator = null
+            });
+
+            FmlCreator fmlCreator = new FmlCreator();
+
+            // Load Target Structures
+            string typesFile = Path.Combine(targetFolder, "profiles-types.json");
+            LoadStructures(ds, fmlCreator.Target, typesFile);
+            // Console.WriteLine();
+            string resourcesFile = Path.Combine(targetFolder, "profiles-resources.json");
+            LoadStructures(ds, fmlCreator.Target, resourcesFile);
+            // LoadStructures(ds, fmlCreator.TargetResources, resourcesFile);
+
+            // Load Source Structures
+            // Console.WriteLine();
+            typesFile = Path.Combine(sourceFolder, "profiles-types.json");
+            LoadStructures(ds, fmlCreator.Source, typesFile);
+            // Console.WriteLine();
+            resourcesFile = Path.Combine(sourceFolder, "profiles-resources.json");
+            LoadStructures(ds, fmlCreator.Source, resourcesFile);
+            // LoadStructures(ds, fmlCreator.SourceResources, resourcesFile);
+
+            Console.WriteLine();
+            var maps = fmlCreator.GenerateMaps();
+
+            Console.WriteLine();
+            foreach (var map in maps)
+            {
+                var fmlText = FmlSerializer.Serialize(map);
+                Console.WriteLine(fmlText);
+            }
+        }
+
+        [TestMethod]
+        public void RecreateR4toR6maps()
+        {
+            string targetFolder = Path.Combine(Path.GetTempPath(), "FML", "R6-SD");
+            if (!Directory.Exists(targetFolder))
+                Directory.CreateDirectory(targetFolder);
+            Console.WriteLine($"Processing target structures in {targetFolder}");
+            string sourceFolder = Path.Combine(Path.GetTempPath(), "FML", "R4-SD");
+            if (!Directory.Exists(sourceFolder))
+                Directory.CreateDirectory(sourceFolder);
+            Console.WriteLine($"Processing source structures in {sourceFolder}");
+
+            FhirJsonPocoDeserializer ds = new FhirJsonPocoDeserializer(new FhirJsonPocoDeserializerSettings()
+            {
+                AnnotateResourceParseExceptions = true,
+                Validator = null
+            });
+
+            FmlCreator fmlCreator = new FmlCreator();
+
+            // Load Target Structures
+            string typesFile = Path.Combine(targetFolder, "profiles-types.json");
+            LoadStructures(ds, fmlCreator.Target, typesFile);
+            // Console.WriteLine();
+            string resourcesFile = Path.Combine(targetFolder, "profiles-resources.json");
+            LoadStructures(ds, fmlCreator.Target, resourcesFile);
+            // LoadStructures(ds, fmlCreator.TargetResources, resourcesFile);
+
+            // Load Source Structures
+            // Console.WriteLine();
+            typesFile = Path.Combine(sourceFolder, "profiles-types.json");
+            LoadStructures(ds, fmlCreator.Source, typesFile);
+            // Console.WriteLine();
+            resourcesFile = Path.Combine(sourceFolder, "profiles-resources.json");
+            LoadStructures(ds, fmlCreator.Source, resourcesFile);
+            // LoadStructures(ds, fmlCreator.SourceResources, resourcesFile);
 
             Console.WriteLine();
             var maps = fmlCreator.GenerateMaps();
@@ -66,7 +162,8 @@ namespace fml_tester
         {
             var ts = File.ReadAllBytes(typesFile);
             var js = new Utf8JsonReader(ts);
-            if (ds.TryDeserializeResource(ref js, out var resource, out var issues))
+            ds.TryDeserializeResource(ref js, out var resource, out var issues);
+            if (resource != null)
             {
                 // read all the resources in the bundle
                 if (resource is Bundle bun)

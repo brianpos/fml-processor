@@ -6,7 +6,7 @@ namespace fml_processor;
 
 public class ConceptMapConverter
 {
-    string? getFhirVersion(string? version)
+    public static string? getFhirVersion(string? version)
     {
         return version?.Substring(0, 3) switch
         {
@@ -18,7 +18,7 @@ public class ConceptMapConverter
             _ => null,
         };
     }
-    private string? UseScope(FmlStructureMap map, DataType dt, StructureMode mode)
+    public static string? UseScope(FmlStructureMap map, DataType dt, StructureMode mode)
     {
         if (dt is Canonical == false)
             return null;

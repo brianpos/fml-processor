@@ -52,7 +52,7 @@ namespace fml_tester
 		[TestMethod]
 		public async Task ValidateAccountFml()
         {
-            var filename = "C:\\temp\\fhir-cross-version-source\\R5_R6\\maps\\Resources\\ConceptMap-R5-Account-R6-Account.json";
+            var filename = "C:\\temp\\fhir-cross-version-source\\R5_R6\\maps\\Resources\\ConceptMap-R5-ArtifactAssessment-R6-ArtifactAssessment.json";
             var cmText = File.ReadAllText(filename);
             var conceptMap = new FhirJsonParser().Parse<Hl7.Fhir.Model.ConceptMap>(cmText);
 
@@ -72,10 +72,13 @@ namespace fml_tester
                         Path.Combine(userPath, "hl7.fhir.r5.core#5.0.0", "package"), dirSettings)
                     )
                 );
+            string targetFolder = Path.Combine(Path.GetTempPath(), "FML", "R6-SD");
+            if (!Directory.Exists(targetFolder))
+                Directory.CreateDirectory(targetFolder);
             IAsyncResourceResolver targetResolver = new CachedResolver(
                 new VersionFilterResolver("6.0",
                     new Hl7.Fhir.Specification.Source.DirectorySource(
-                        Path.Combine(userPath, "hl7.fhir.r6.core#current", "package"), dirSettings)
+                        targetFolder, dirSettings)
                     )
                 );
             var source = new MultiResolver(sourceResolver, targetResolver);
@@ -358,19 +361,21 @@ namespace fml_tester
             // Specific Source and Target FHIR Version StructureDefinition Resolvers
             string userPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             userPath = Path.Combine(userPath, ".fhir", "packages");
-            var dirSettings = new DirectorySourceSettings() { Includes = ["StructureDefinition-*.*"] };
+            var dirSettings = new DirectorySourceSettings() { Includes = ["StructureDefinition-*.*"], Mask = "StructureDefinition-*.*" };
+            var dsSource = new Hl7.Fhir.Specification.Source.DirectorySource(
+                        Path.Combine(userPath, "hl7.fhir.r5.core#5.0.0", "package"), dirSettings
+                    );
+            dsSource.Refresh(true); // force the loading
             IAsyncResourceResolver sourceResolver = new CachedResolver(
-                new VersionFilterResolver("5.0",
-                new Hl7.Fhir.Specification.Source.DirectorySource(
-                        Path.Combine(userPath, "hl7.fhir.r5.core#5.0.0", "package"), dirSettings)
-                    )
-                );
+                new VersionFilterResolver("5.0", dsSource));
+
+            string targetFolder = Path.Combine(Path.GetTempPath(), "FML", "R6-SD");
+            if (!Directory.Exists(targetFolder))
+                Directory.CreateDirectory(targetFolder);
+            var dsTarget = new Hl7.Fhir.Specification.Source.DirectorySource(targetFolder, dirSettings);
+            dsTarget.Refresh(true);
             IAsyncResourceResolver targetResolver = new CachedResolver(
-                new VersionFilterResolver("6.0",
-                    new Hl7.Fhir.Specification.Source.DirectorySource(
-                        Path.Combine(userPath, "hl7.fhir.r6.core#current", "package"), dirSettings)
-                    )
-                );
+                new VersionFilterResolver("6.0", dsTarget));
             var source = new MultiResolver(sourceResolver, targetResolver);
 
             foreach (var filename in files)
@@ -388,7 +393,7 @@ namespace fml_tester
                 await ValidateMap(fml, sourceResolver, targetResolver);
 
                 var fmlText = FmlSerializer.Serialize(fml);
-                Console.WriteLine(fmlText);
+                // Console.WriteLine(fmlText);
 
                 var filenameOut = Path.Combine(outputPath, $"{fml.Groups[0].Name}_5to6.fml");
                 File.WriteAllText(filenameOut, fmlText);
