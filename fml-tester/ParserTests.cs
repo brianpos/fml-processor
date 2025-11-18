@@ -4,7 +4,7 @@ using fml_processor.Models;
 namespace fml_tester
 {
     [TestClass]
-    public sealed class Test1
+    public sealed class ParserTests
     {
         [TestMethod]
         public void TestMethod1()
