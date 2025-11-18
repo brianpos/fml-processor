@@ -1,3 +1,5 @@
+using Hl7.Fhir.Utility;
+
 namespace fml_processor.Models;
 
 /// <summary>
@@ -9,7 +11,7 @@ namespace fml_processor.Models;
 /// - Source position tracking (for error reporting and IDE features)
 /// - Hidden token preservation (for exact round-trip serialization of comments and formatting)
 /// </remarks>
-public abstract class FmlNode
+public abstract class FmlNode: IAnnotated, IAnnotatable
 {
     /// <summary>
     /// Source position information for this node in the original FML text.
@@ -40,6 +42,28 @@ public abstract class FmlNode
     /// Newlines and subsequent content become leading tokens for the next element.
     /// </remarks>
     public List<HiddenToken>? TrailingHiddenTokens { get; set; }
+
+    #region << Annotations >>
+    [NonSerialized]
+    private AnnotationList _annotations;
+
+    private AnnotationList annotations => LazyInitializer.EnsureInitialized(ref _annotations, () => new AnnotationList());
+
+    public IEnumerable<object> Annotations(Type type)
+    {
+        return annotations.OfType(type);
+    }
+
+    public void AddAnnotation(object annotation)
+    {
+        annotations.AddAnnotation(annotation);
+    }
+
+    public void RemoveAnnotations(Type type)
+    {
+        annotations.RemoveAnnotations(type);
+    }
+    #endregion
 }
 
 /// <summary>
