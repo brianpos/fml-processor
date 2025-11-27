@@ -328,53 +328,53 @@ public partial class FSHBaseListener : IFSHListener {
 	/// <param name="context">The parse tree.</param>
 	public virtual void ExitRuleSetRule([NotNull] FSHParser.RuleSetRuleContext context) { }
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.paramRuleSet"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParamList"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void EnterParamRuleSet([NotNull] FSHParser.ParamRuleSetContext context) { }
+	public virtual void EnterRuleSetParamList([NotNull] FSHParser.RuleSetParamListContext context) { }
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.paramRuleSet"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParamList"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void ExitParamRuleSet([NotNull] FSHParser.ParamRuleSetContext context) { }
+	public virtual void ExitRuleSetParamList([NotNull] FSHParser.RuleSetParamListContext context) { }
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.paramRuleSetRef"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParam"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void EnterParamRuleSetRef([NotNull] FSHParser.ParamRuleSetRefContext context) { }
+	public virtual void EnterRuleSetParam([NotNull] FSHParser.RuleSetParamContext context) { }
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.paramRuleSetRef"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParam"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void ExitParamRuleSetRef([NotNull] FSHParser.ParamRuleSetRefContext context) { }
+	public virtual void ExitRuleSetParam([NotNull] FSHParser.RuleSetParamContext context) { }
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.parameter"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParamText"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void EnterParameter([NotNull] FSHParser.ParameterContext context) { }
+	public virtual void EnterRuleSetParamText([NotNull] FSHParser.RuleSetParamTextContext context) { }
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.parameter"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParamText"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void ExitParameter([NotNull] FSHParser.ParameterContext context) { }
+	public virtual void ExitRuleSetParamText([NotNull] FSHParser.RuleSetParamTextContext context) { }
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.lastParameter"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParamPart"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void EnterLastParameter([NotNull] FSHParser.LastParameterContext context) { }
+	public virtual void EnterRuleSetParamPart([NotNull] FSHParser.RuleSetParamPartContext context) { }
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.lastParameter"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParamPart"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void ExitLastParameter([NotNull] FSHParser.LastParameterContext context) { }
+	public virtual void ExitRuleSetParamPart([NotNull] FSHParser.RuleSetParamPartContext context) { }
 	/// <summary>
 	/// Enter a parse tree produced by <see cref="FSHParser.paramRuleSetContent"/>.
 	/// <para>The default implementation does nothing.</para>
@@ -580,18 +580,6 @@ public partial class FSHBaseListener : IFSHListener {
 	/// <param name="context">The parse tree.</param>
 	public virtual void ExitContextItem([NotNull] FSHParser.ContextItemContext context) { }
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.lastContextItem"/>.
-	/// <para>The default implementation does nothing.</para>
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	public virtual void EnterLastContextItem([NotNull] FSHParser.LastContextItemContext context) { }
-	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.lastContextItem"/>.
-	/// <para>The default implementation does nothing.</para>
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	public virtual void ExitLastContextItem([NotNull] FSHParser.LastContextItemContext context) { }
-	/// <summary>
 	/// Enter a parse tree produced by <see cref="FSHParser.characteristics"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
@@ -735,6 +723,18 @@ public partial class FSHBaseListener : IFSHListener {
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	public virtual void ExitInsertRule([NotNull] FSHParser.InsertRuleContext context) { }
+	/// <summary>
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetInsert"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void EnterRuleSetInsert([NotNull] FSHParser.RuleSetInsertContext context) { }
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetInsert"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void ExitRuleSetInsert([NotNull] FSHParser.RuleSetInsertContext context) { }
 	/// <summary>
 	/// Enter a parse tree produced by <see cref="FSHParser.codeInsertRule"/>.
 	/// <para>The default implementation does nothing.</para>

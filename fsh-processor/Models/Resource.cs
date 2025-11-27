@@ -26,7 +26,7 @@ public class Resource : FshEntity
     public string? Description { get; set; }
 
     /// <summary>
-    /// Rules defining the resource
+    /// Rules defining the resource (can include SD rules and LR-specific rules)
     /// </summary>
-    public List<LrRule> Rules { get; set; } = new();
+    public List<FshRule> Rules { get; set; } = new();
 }

@@ -275,45 +275,45 @@ public interface IFSHListener : IParseTreeListener {
 	/// <param name="context">The parse tree.</param>
 	void ExitRuleSetRule([NotNull] FSHParser.RuleSetRuleContext context);
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.paramRuleSet"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParamList"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void EnterParamRuleSet([NotNull] FSHParser.ParamRuleSetContext context);
+	void EnterRuleSetParamList([NotNull] FSHParser.RuleSetParamListContext context);
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.paramRuleSet"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParamList"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void ExitParamRuleSet([NotNull] FSHParser.ParamRuleSetContext context);
+	void ExitRuleSetParamList([NotNull] FSHParser.RuleSetParamListContext context);
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.paramRuleSetRef"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParam"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void EnterParamRuleSetRef([NotNull] FSHParser.ParamRuleSetRefContext context);
+	void EnterRuleSetParam([NotNull] FSHParser.RuleSetParamContext context);
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.paramRuleSetRef"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParam"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void ExitParamRuleSetRef([NotNull] FSHParser.ParamRuleSetRefContext context);
+	void ExitRuleSetParam([NotNull] FSHParser.RuleSetParamContext context);
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.parameter"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParamText"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void EnterParameter([NotNull] FSHParser.ParameterContext context);
+	void EnterRuleSetParamText([NotNull] FSHParser.RuleSetParamTextContext context);
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.parameter"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParamText"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void ExitParameter([NotNull] FSHParser.ParameterContext context);
+	void ExitRuleSetParamText([NotNull] FSHParser.RuleSetParamTextContext context);
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.lastParameter"/>.
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetParamPart"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void EnterLastParameter([NotNull] FSHParser.LastParameterContext context);
+	void EnterRuleSetParamPart([NotNull] FSHParser.RuleSetParamPartContext context);
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.lastParameter"/>.
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetParamPart"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void ExitLastParameter([NotNull] FSHParser.LastParameterContext context);
+	void ExitRuleSetParamPart([NotNull] FSHParser.RuleSetParamPartContext context);
 	/// <summary>
 	/// Enter a parse tree produced by <see cref="FSHParser.paramRuleSetContent"/>.
 	/// </summary>
@@ -485,16 +485,6 @@ public interface IFSHListener : IParseTreeListener {
 	/// <param name="context">The parse tree.</param>
 	void ExitContextItem([NotNull] FSHParser.ContextItemContext context);
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="FSHParser.lastContextItem"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	void EnterLastContextItem([NotNull] FSHParser.LastContextItemContext context);
-	/// <summary>
-	/// Exit a parse tree produced by <see cref="FSHParser.lastContextItem"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	void ExitLastContextItem([NotNull] FSHParser.LastContextItemContext context);
-	/// <summary>
 	/// Enter a parse tree produced by <see cref="FSHParser.characteristics"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
@@ -614,6 +604,16 @@ public interface IFSHListener : IParseTreeListener {
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	void ExitInsertRule([NotNull] FSHParser.InsertRuleContext context);
+	/// <summary>
+	/// Enter a parse tree produced by <see cref="FSHParser.ruleSetInsert"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void EnterRuleSetInsert([NotNull] FSHParser.RuleSetInsertContext context);
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="FSHParser.ruleSetInsert"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void ExitRuleSetInsert([NotNull] FSHParser.RuleSetInsertContext context);
 	/// <summary>
 	/// Enter a parse tree produced by <see cref="FSHParser.codeInsertRule"/>.
 	/// </summary>

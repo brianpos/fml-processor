@@ -6,6 +6,7 @@ using fsh_processor.antlr;
 /// Represents a hidden token from the ANTLR parser (comments, whitespace, etc.)
 /// These tokens are sent to the HIDDEN channel during lexing and can be preserved
 /// for exact round-trip serialization.
+/// All comments and whitespace will retain their original formatting, including line breaks.
 /// </summary>
 public class HiddenToken
 {

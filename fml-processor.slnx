@@ -4,4 +4,6 @@
   </Folder>
   <Project Path="fml-processor/fml-processor.csproj" />
   <Project Path="fml-tester/fml-tester.csproj" />
+  <Project Path="fsh-processor/fsh-processor.csproj" Id="b5aaf120-4bd0-463b-8830-928c5d310c03" />
+  <Project Path="fsh-tester/fsh-tester.csproj" Id="1ab78aba-81a5-4f71-aaed-318678747511" />
 </Solution>

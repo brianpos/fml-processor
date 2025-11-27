@@ -70,8 +70,6 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             return Visit(context.codeSystem());
         if (context.ruleSet() != null)
             return Visit(context.ruleSet());
-        if (context.paramRuleSet() != null)
-            return Visit(context.paramRuleSet());
         if (context.mapping() != null)
             return Visit(context.mapping());
 
@@ -117,12 +115,15 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         }
 
         // Process rules
+        FshRule? previousRule = null;
         foreach (var rule in context.sdRule())
         {
-            var sdRule = Visit(rule) as SdRule;
+            var sdRule = Visit(rule) as FshRule;
             if (sdRule != null)
             {
+                ExtractAndAttachInlineComment(rule, previousRule);
                 profile.Rules.Add(sdRule);
+                previousRule = sdRule;
             }
         }
 
@@ -153,12 +154,15 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         }
 
         // Process rules
+        FshRule? previousRule = null;
         foreach (var rule in context.sdRule())
         {
-            var sdRule = Visit(rule) as SdRule;
+            var sdRule = Visit(rule) as FshRule;
             if (sdRule != null)
             {
+                ExtractAndAttachInlineComment(rule, previousRule);
                 extension.Rules.Add(sdRule);
+                previousRule = sdRule;
             }
         }
 
@@ -189,12 +193,15 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         }
 
         // Process rules
+        FshRule? previousRule = null;
         foreach (var rule in context.lrRule())
         {
             var lrRule = Visit(rule) as LrRule;
             if (lrRule != null)
             {
+                ExtractAndAttachInlineComment(rule, previousRule);
                 logical.Rules.Add(lrRule);
+                previousRule = lrRule;
             }
         }
 
@@ -219,12 +226,15 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         }
 
         // Process rules
+        FshRule? previousRule = null;
         foreach (var rule in context.lrRule())
         {
             var lrRule = Visit(rule) as LrRule;
             if (lrRule != null)
             {
+                ExtractAndAttachInlineComment(rule, previousRule);
                 resource.Rules.Add(lrRule);
+                previousRule = lrRule;
             }
         }
 
@@ -353,64 +363,200 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
 
     public override object? VisitRuleSet([NotNull] FSHParser.RuleSetContext context)
     {
-        // Grammar: KW_RULESET RULESET_REFERENCE ruleSetRule+
+        // Grammar: KW_RULESET name (LPAREN ruleSetParamList? RPAREN paramRuleSetContent | ruleSetRule+);
         var ruleSet = new RuleSet
         {
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
-            Name = context.RULESET_REFERENCE().GetText()
+            Name = context.name().GetText()
         };
 
-        // Process rules
-        foreach (var rule in context.ruleSetRule())
+        // Check if this is a parameterized ruleset (has LPAREN)
+        if (context.LPAREN() != null)
         {
-            var ruleSetRule = Visit(rule) as RuleSetRule;
-            if (ruleSetRule != null)
+            // Parameterized RuleSet
+            ruleSet.IsParameterized = true;
+            
+            // Extract parameters from ruleSetParamList
+            var paramList = context.ruleSetParamList();
+            if (paramList != null)
             {
-                ruleSet.Rules.Add(ruleSetRule);
+                ruleSet.Parameters = ExtractRuleSetParameters(paramList);
+            }
+
+            // Capture the unparsed content
+            var contentContext = context.paramRuleSetContent();
+            if (contentContext != null)
+            {
+                // Get the text from the first token to the last token of paramRuleSetContent
+                var startToken = contentContext.Start;
+                var stopToken = contentContext.Stop;
+                
+                if (startToken != null && stopToken != null)
+                {
+                    // Use the token stream to get the exact text including whitespace
+                    ruleSet.UnparsedContent = _tokenStream.GetText(new Antlr4.Runtime.Misc.Interval(startToken.TokenIndex, stopToken.TokenIndex));
+                }
+            }
+        }
+        else
+        {
+            // Non-parameterized RuleSet
+            // Process rules
+            foreach (var rule in context.ruleSetRule())
+            {
+                var fshRule = Visit(rule) as FshRule;
+                if (fshRule != null)
+                {
+                    ruleSet.Rules.Add(fshRule);
+                }
             }
         }
 
         return ruleSet;
     }
-
-    public override object? VisitParamRuleSet([NotNull] FSHParser.ParamRuleSetContext context)
+    
+    
+    public override object? VisitRuleSetParam([NotNull] FSHParser.RuleSetParamContext context)
     {
-        // Grammar: KW_RULESET paramRuleSetRef paramRuleSetContent
-        var paramRuleSetRef = context.paramRuleSetRef();
-        var ruleSet = new RuleSet
+        // Grammar: ruleSetParam: MULTILINE_STRING | DOUBLE_BRACKET_STRING | STRING | ruleSetParamText;
+        string value;
+        bool isBracketed = false;
+        
+        if (context.MULTILINE_STRING() != null)
+        {
+            value = ExtractMulitLineString(context.MULTILINE_STRING().GetText());
+        }
+        else if (context.DOUBLE_BRACKET_STRING() != null)
+        {
+            var text = context.DOUBLE_BRACKET_STRING().GetText();
+            value = text.Substring(2, text.Length - 4); // Remove [[ and ]]
+            // Handle escape sequences per spec: ]],\, or ]]\) should have the \ removed
+            // "the ) or , following the ]] MUST be escaped with a backslash"
+            // So we need to unescape ]],\ to ]],, and ]]\) to ]])
+            value = value.Replace("]],\\", "]],").Replace("]]\\)", "]])");
+            isBracketed = true;
+        }
+        else if (context.STRING() != null)
+        {
+            value = ExtractString(context.STRING().GetText());
+        }
+        else if (context.ruleSetParamText() != null)
+        {
+            value = ProcessRuleSetParamText(context.ruleSetParamText());
+        }
+        else
+        {
+            value = context.GetText();
+        }
+        
+        return new RuleSetParameter
         {
             Position = GetPosition(context),
-            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
-            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
-            Name = paramRuleSetRef.PARAM_RULESET_REFERENCE().GetText(),
-            IsParameterized = true
+            Value = value,
+            IsBracketed = isBracketed
         };
+    }
 
-        // Extract parameters
+    /// <summary>
+    /// Extracts parameters from a ruleSetParamList, handling empty parameters between commas.
+    /// Grammar: ruleSetParamList: (ruleSetParam | COMMA)+;
+    /// Example: (param1,,param3) has 3 parameters where param2 is empty.
+    /// </summary>
+    private List<RuleSetParameter> ExtractRuleSetParameters(FSHParser.RuleSetParamListContext context)
+    {
         var parameters = new List<RuleSetParameter>();
-        foreach (var param in paramRuleSetRef.parameter())
-        {
-            var paramText = param.BRACKETED_PARAM() != null
-                ? param.BRACKETED_PARAM().GetText()
-                : param.PLAIN_PARAM().GetText();
-            parameters.Add(new RuleSetParameter { Value = paramText });
-        }
-        if (paramRuleSetRef.lastParameter() != null)
-        {
-            var lastParamText = paramRuleSetRef.lastParameter().LAST_BRACKETED_PARAM() != null
-                ? paramRuleSetRef.lastParameter().LAST_BRACKETED_PARAM().GetText()
-                : paramRuleSetRef.lastParameter().LAST_PLAIN_PARAM().GetText();
-            parameters.Add(new RuleSetParameter { Value = lastParamText });
-        }
-        ruleSet.Parameters = parameters;
+        var children = context.children;
+        if (children == null) return parameters;
 
-        // Note: paramRuleSetContent processing is complex - it's raw text until next entity
-        // For now, we'll mark this as needing further processing
-        // TODO: Parse the content between parameter definition and next entity
+        RuleSetParameter? currentParam = null;
+        
+        foreach (var child in children)
+        {
+            if (child is ITerminalNode terminal && terminal.Symbol.Type == FSHLexer.COMMA)
+            {
+                // Hit a comma - finalize current parameter
+                if (currentParam != null)
+                {
+                    parameters.Add(currentParam);
+                    currentParam = null;
+                }
+                else
+                {
+                    // Empty parameter before this comma
+                    parameters.Add(new RuleSetParameter
+                    {
+                        Position = GetPosition(terminal as ParserRuleContext),
+                        Value = string.Empty,
+                        IsBracketed = false
+                    });
+                }
+            }
+            else if (child is FSHParser.RuleSetParamContext paramContext)
+            {
+                currentParam = Visit(paramContext) as RuleSetParameter;
+            }
+        }
+        
+        // Add the last parameter (or empty if list ends with comma)
+        if (currentParam != null)
+        {
+            parameters.Add(currentParam);
+        }
+        else if (children.Count > 0 && children[children.Count - 1] is ITerminalNode lastTerminal && lastTerminal.Symbol.Type == FSHLexer.COMMA)
+        {
+            // List ends with comma - add empty parameter
+            parameters.Add(new RuleSetParameter
+            {
+                Value = string.Empty,
+                IsBracketed = false
+            });
+        }
+        
+        return parameters;
+    }
 
-        return ruleSet;
+    /// <summary>
+    /// Processes ruleSetParamText by concatenating tokens and handling escape sequences.
+    /// Escape sequences: \) and \, where the backslash indicates the following character
+    /// should be treated as literal content rather than a delimiter.
+    /// </summary>
+    private string ProcessRuleSetParamText(FSHParser.RuleSetParamTextContext context)
+    {
+        var result = new System.Text.StringBuilder();
+        var parts = context.ruleSetParamPart();
+        
+        for (int i = 0; i < parts.Length; i++)
+        {
+            var part = parts[i];
+            var text = part.GetText();
+            
+            // Check if this is an escape sequence pattern: SEQUENCE RPAREN or SEQUENCE COMMA
+            // These appear as two children in the parse tree
+            if (part.ChildCount == 2)
+            {
+                var firstChild = part.GetChild(0);
+                var secondChild = part.GetChild(1);
+                
+                // If first child is \ and second is ) or ,
+                if (firstChild?.GetText() == "\\")
+                {
+                    var secondText = secondChild?.GetText();
+                    if (secondText == ")" || secondText == ",")
+                    {
+                        // This is an escape sequence - include the escaped character without the backslash
+                        result.Append(secondText);
+                        continue;
+                    }
+                }
+            }
+            
+            // Normal token - just append its text
+            result.Append(text);
+        }
+        
+        return result.ToString();
     }
 
     public override object? VisitMapping([NotNull] FSHParser.MappingContext context)
@@ -453,20 +599,24 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         if (context.parent() != null)
         {
             profile.Parent = context.parent().name().GetText();
+            return;
         }
-        else if (context.id() != null)
+        if (context.id() != null)
         {
             profile.Id = context.id().name().GetText();
+            return;
         }
-        else if (context.title() != null)
+        if (context.title() != null)
         {
             profile.Title = ExtractString(context.title().STRING().GetText());
+            return;
         }
-        else if (context.description() != null)
+        var desc = context.description();
+        if (desc != null)
         {
             profile.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
     }
 
@@ -488,7 +638,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             extension.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
     }
 
@@ -510,7 +660,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             logical.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
     }
 
@@ -532,30 +682,24 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             resource.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
     }
 
     private void ProcessExtensionContext(Extension extension, FSHParser.ContextContext context)
     {
-        // Grammar: context: KW_CONTEXT contextItem* lastContextItem;
+        // Grammar: context: KW_CONTEXT contextItem (COMMA contextItem)*;
+        // Grammar: contextItem: STRING | SEQUENCE | CODE;
         var contexts = new List<Context>();
         
         foreach (var item in context.contextItem())
         {
-            var isQuoted = item.QUOTED_CONTEXT() != null;
+            var isQuoted = item.STRING() != null;
             var text = isQuoted
-                ? item.QUOTED_CONTEXT().GetText() 
-                : item.UNQUOTED_CONTEXT().GetText();
-            contexts.Add(new Context { Value = text, IsQuoted = isQuoted });
-        }
-
-        if (context.lastContextItem() != null)
-        {
-            var isQuoted = context.lastContextItem().LAST_QUOTED_CONTEXT() != null;
-            var text = isQuoted
-                ? context.lastContextItem().LAST_QUOTED_CONTEXT().GetText()
-                : context.lastContextItem().LAST_UNQUOTED_CONTEXT().GetText();
+                ? ExtractString(item.STRING().GetText())
+                : item.SEQUENCE() != null 
+                    ? item.SEQUENCE().GetText()
+                    : item.CODE().GetText();
             contexts.Add(new Context { Value = text, IsQuoted = isQuoted });
         }
 
@@ -567,17 +711,16 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
 
     private void ProcessCharacteristics(Logical logical, FSHParser.CharacteristicsContext context)
     {
-        // Grammar: characteristics: KW_CHARACTERISTICS CODE_ITEM* LAST_CODE_ITEM;
+        // Grammar: characteristics: KW_CHARACTERISTICS code (COMMA code)*;
         var characteristics = new List<string>();
 
-        foreach (var item in context.CODE_ITEM())
+        foreach (var codeContext in context.code())
         {
-            characteristics.Add(item.GetText());
-        }
-
-        if (context.LAST_CODE_ITEM() != null)
-        {
-            characteristics.Add(context.LAST_CODE_ITEM().GetText());
+            var code = Visit(codeContext) as Code;
+            if (code != null)
+            {
+                characteristics.Add(code.Value);
+            }
         }
 
         logical.Characteristics = characteristics.Count > 0 ? characteristics : null;
@@ -598,7 +741,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             instance.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
         else if (context.usage() != null)
         {
@@ -613,7 +756,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             invariant.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
         else if (context.expression() != null)
         {
@@ -644,7 +787,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             valueSet.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
     }
 
@@ -663,7 +806,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             codeSystem.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
     }
 
@@ -690,7 +833,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             mapping.Description = context.description().STRING() != null
                 ? ExtractString(context.description().STRING().GetText())
-                : ExtractString(context.description().MULTILINE_STRING().GetText());
+                : ExtractMulitLineString(context.description().MULTILINE_STRING().GetText());
         }
     }
 
@@ -725,6 +868,15 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         return null;
     }
 
+    private string GetRuleIndent(ITerminalNode node)
+    {
+        var text = node.GetText();
+        text = text.TrimEnd(); // remove any trailing whitespace
+        text = text.TrimEnd('*'); // remove the star token
+        text = text.TrimStart('\r', '\n'); // remove any leading newlines
+        return text;
+    }
+
     public override object? VisitCardRule([NotNull] FSHParser.CardRuleContext context)
     {
         // Grammar: cardRule: STAR path CARD flag*;
@@ -740,6 +892,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             Cardinality = context.CARD().GetText(),
             Flags = flags
         };
@@ -769,6 +922,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path(0).GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             AdditionalPaths = additionalPaths,
             Flags = flags
         };
@@ -783,6 +937,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             ValueSetName = context.name().GetText(),
             Strength = context.strength()?.GetText()
         };
@@ -799,6 +954,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             Value = value,
             Exactly = context.KW_EXACTLY() != null
         };
@@ -823,6 +979,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             Items = items
         };
     }
@@ -863,6 +1020,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             TargetTypes = types
         };
     }
@@ -882,6 +1040,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path()?.GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             InvariantNames = invariants
         };
     }
@@ -897,6 +1056,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path()?.GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             CaretPath = context.caretPath().GetText(),
             Value = value
         };
@@ -904,10 +1064,18 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
 
     public override object? VisitInsertRule([NotNull] FSHParser.InsertRuleContext context)
     {
-        // Grammar: insertRule: STAR path? KW_INSERT (RULESET_REFERENCE | paramRuleSetRef);
-        var ruleSetRef = context.RULESET_REFERENCE() != null
-            ? context.RULESET_REFERENCE().GetText()
-            : context.paramRuleSetRef().GetText(); // TODO: Extract parameters properly
+        // Grammar: insertRule: STAR path? KW_INSERT ruleSetInsert;
+        // Grammar: ruleSetInsert: name (LPAREN ruleSetParamList? RPAREN)?;
+        var ruleSetInsert = context.ruleSetInsert();
+        var name = ruleSetInsert.name().GetText();
+        
+        List<string>? parameters = null;
+        var paramList = ruleSetInsert.ruleSetParamList();
+        if (paramList != null)
+        {
+            var ruleSetParams = ExtractRuleSetParameters(paramList);
+            parameters = ruleSetParams.Select(p => p.Value).ToList();
+        }
 
         return new InsertRule
         {
@@ -915,8 +1083,10 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path()?.GetText(),
-            RuleSetReference = ruleSetRef,
-            IsParameterized = context.paramRuleSetRef() != null
+            Indent = GetRuleIndent(context.STAR()),
+            RuleSetReference = name,
+            Parameters = parameters,
+            IsParameterized = parameters != null && parameters.Count > 0
         };
     }
 
@@ -928,7 +1098,8 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
-            Path = context.path().GetText()
+            Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
         };
     }
 
@@ -953,6 +1124,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     LeadingHiddenTokens = cardRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = cardRule.TrailingHiddenTokens,
                     Path = cardRule.Path,
+                    Indent = cardRule.Indent,
                     Cardinality = cardRule.Cardinality,
                     Flags = cardRule.Flags
                 };
@@ -967,6 +1139,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     LeadingHiddenTokens = flagRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = flagRule.TrailingHiddenTokens,
                     Path = flagRule.Path,
+                    Indent = flagRule.Indent,
                     AdditionalPaths = flagRule.AdditionalPaths,
                     Flags = flagRule.Flags
                 };
@@ -982,6 +1155,100 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             return Visit(context.addCRElementRule());
 
         return null;
+    }
+
+    public override object? VisitAddElementRule([NotNull] FSHParser.AddElementRuleContext context)
+    {
+        // Grammar: addElementRule: STAR path CARD flag* targetType (KW_OR targetType)* STRING (STRING | MULTILINE_STRING)?;
+        var flags = new List<string>();
+        foreach (var flag in context.flag())
+        {
+            flags.Add(flag.GetText());
+        }
+
+        var targetTypes = new List<string>();
+        foreach (var targetType in context.targetType())
+        {
+            targetTypes.Add(targetType.GetText());
+        }
+
+        string? shortDescription = null;
+        string? definition = null;
+
+        var strings = context.STRING();
+        if (strings != null && strings.Length > 0)
+        {
+            shortDescription = ExtractString(strings[0].GetText());
+            if (strings.Length > 1)
+            {
+                definition = ExtractString(strings[1].GetText());
+            }
+        }
+
+        if (definition == null && context.MULTILINE_STRING() != null)
+        {
+            definition = ExtractMulitLineString(context.MULTILINE_STRING().GetText());
+        }
+
+        return new AddElementRule
+        {
+            Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
+            Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
+            Cardinality = context.CARD().GetText(),
+            Flags = flags,
+            TargetTypes = targetTypes,
+            ShortDescription = shortDescription,
+            Definition = definition
+        };
+    }
+
+    public override object? VisitAddCRElementRule([NotNull] FSHParser.AddCRElementRuleContext context)
+    {
+        // Grammar: addCRElementRule: STAR path CARD flag* KW_CONTENTREFERENCE (SEQUENCE | CODE) STRING (STRING | MULTILINE_STRING)?;
+        var flags = new List<string>();
+        foreach (var flag in context.flag())
+        {
+            flags.Add(flag.GetText());
+        }
+
+        var contentReference = context.SEQUENCE() != null
+            ? context.SEQUENCE().GetText()
+            : context.CODE().GetText();
+
+        string? shortDescription = null;
+        string? definition = null;
+
+        var strings = context.STRING();
+        if (strings != null && strings.Length > 0)
+        {
+            shortDescription = ExtractString(strings[0].GetText());
+            if (strings.Length > 1)
+            {
+                definition = ExtractString(strings[1].GetText());
+            }
+        }
+
+        if (definition == null && context.MULTILINE_STRING() != null)
+        {
+            definition = ExtractMulitLineString(context.MULTILINE_STRING().GetText());
+        }
+
+        return new AddCRElementRule
+        {
+            Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context),
+            Path = context.path().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
+            Cardinality = context.CARD().GetText(),
+            Flags = flags,
+            ContentReference = contentReference,
+            ShortDescription = shortDescription,
+            Definition = definition
+        };
     }
 
     #endregion
@@ -1002,6 +1269,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                 LeadingHiddenTokens = fvr.LeadingHiddenTokens,
                 TrailingHiddenTokens = fvr.TrailingHiddenTokens,
                 Path = fvr.Path,
+                Indent = fvr.Indent,
                 Value = fvr.Value,
                 Exactly = fvr.Exactly
             };
@@ -1014,6 +1282,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                 LeadingHiddenTokens = ir.LeadingHiddenTokens,
                 TrailingHiddenTokens = ir.TrailingHiddenTokens,
                 Path = ir.Path,
+                Indent = ir.Indent,
                 RuleSetReference = ir.RuleSetReference,
                 Parameters = ir.Parameters,
                 IsParameterized = ir.IsParameterized
@@ -1026,7 +1295,8 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                 Position = pr.Position,
                 LeadingHiddenTokens = pr.LeadingHiddenTokens,
                 TrailingHiddenTokens = pr.TrailingHiddenTokens,
-                Path = pr.Path
+                Path = pr.Path,
+                Indent = pr.Indent
             };
         }
 
@@ -1047,6 +1317,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                 LeadingHiddenTokens = fvr.LeadingHiddenTokens,
                 TrailingHiddenTokens = fvr.TrailingHiddenTokens,
                 Path = fvr.Path,
+                Indent = fvr.Indent,
                 Value = fvr.Value,
                 Exactly = fvr.Exactly
             };
@@ -1059,6 +1330,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                 LeadingHiddenTokens = ir.LeadingHiddenTokens,
                 TrailingHiddenTokens = ir.TrailingHiddenTokens,
                 Path = ir.Path,
+                Indent = ir.Indent,
                 RuleSetReference = ir.RuleSetReference,
                 Parameters = ir.Parameters,
                 IsParameterized = ir.IsParameterized
@@ -1071,7 +1343,8 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                 Position = pr.Position,
                 LeadingHiddenTokens = pr.LeadingHiddenTokens,
                 TrailingHiddenTokens = pr.TrailingHiddenTokens,
-                Path = pr.Path
+                Path = pr.Path,
+                Indent = pr.Indent
             };
         }
 
@@ -1099,6 +1372,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     LeadingHiddenTokens = caretRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = caretRule.TrailingHiddenTokens,
                     Path = caretRule.Path,
+                    Indent = caretRule.Indent,
                     CaretPath = caretRule.CaretPath,
                     Value = caretRule.Value
                 };
@@ -1118,6 +1392,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     LeadingHiddenTokens = insertRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = insertRule.TrailingHiddenTokens,
                     Path = insertRule.Path,
+                    Indent = insertRule.Indent,
                     RuleSetReference = insertRule.RuleSetReference,
                     Parameters = insertRule.Parameters,
                     IsParameterized = insertRule.IsParameterized
@@ -1148,31 +1423,42 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Codes = codes,
             CaretPath = context.caretPath().GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             Value = value
         };
     }
 
     public override object? VisitCodeInsertRule([NotNull] FSHParser.CodeInsertRuleContext context)
     {
-        // Grammar: codeInsertRule: STAR CODE* KW_INSERT (RULESET_REFERENCE | paramRuleSetRef);
+        // Grammar: codeInsertRule: STAR CODE* KW_INSERT ruleSetInsert;
+        // Grammar: ruleSetInsert: name (LPAREN ruleSetParamList? RPAREN)?;
         var codes = new List<string>();
         foreach (var code in context.CODE())
         {
             codes.Add(code.GetText());
         }
 
-        var ruleSetRef = context.RULESET_REFERENCE() != null
-            ? context.RULESET_REFERENCE().GetText()
-            : context.paramRuleSetRef().GetText();
+        var ruleSetInsert = context.ruleSetInsert();
+        var name = ruleSetInsert.name().GetText();
+        
+        List<string>? parameters = null;
+        var paramList = ruleSetInsert.ruleSetParamList();
+        if (paramList != null)
+        {
+            var ruleSetParams = ExtractRuleSetParameters(paramList);
+            parameters = ruleSetParams.Select(p => p.Value).ToList();
+        }
 
         return new CodeInsertRule
         {
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
+            Indent = GetRuleIndent(context.STAR()),
             Codes = codes,
-            RuleSetReference = ruleSetRef,
-            IsParameterized = context.paramRuleSetRef() != null
+            RuleSetReference = name,
+            Parameters = parameters,
+            IsParameterized = parameters != null && parameters.Count > 0
         };
     }
 
@@ -1185,15 +1471,17 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         else if (context.KW_EXCLUDE() != null)
             isInclude = false;
 
+        var indent = GetRuleIndent(context.STAR());
+
         if (context.vsConceptComponent() != null)
-            return VisitVsConceptComponent(context.vsConceptComponent(), isInclude);
+            return VisitVsConceptComponent(context.vsConceptComponent(), isInclude, indent);
         if (context.vsFilterComponent() != null)
-            return VisitVsFilterComponent(context.vsFilterComponent(), isInclude);
+            return VisitVsFilterComponent(context.vsFilterComponent(), isInclude, indent);
 
         return null;
     }
 
-    private VsComponentRule? VisitVsConceptComponent(FSHParser.VsConceptComponentContext context, bool? isInclude)
+    private VsComponentRule? VisitVsConceptComponent(FSHParser.VsConceptComponentContext context, bool? isInclude, string indent)
     {
         // Grammar: vsConceptComponent: code vsComponentFrom?;
         var code = Visit(context.code()) as Code;
@@ -1211,6 +1499,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
+            Indent = indent,
             IsInclude = isInclude,
             IsConceptComponent = true,
             ConceptCode = code,
@@ -1219,7 +1508,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         };
     }
 
-    private VsComponentRule? VisitVsFilterComponent(FSHParser.VsFilterComponentContext context, bool? isInclude)
+    private VsComponentRule? VisitVsFilterComponent(FSHParser.VsFilterComponentContext context, bool? isInclude, string indent)
     {
         // Grammar: vsFilterComponent: KW_CODES vsComponentFrom (KW_WHERE vsFilterList)?;
         string? fromSystem = null;
@@ -1256,6 +1545,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
+            Indent = indent,
             IsInclude = isInclude,
             IsConceptComponent = false,
             FromSystem = fromSystem,
@@ -1322,6 +1612,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     Position = codeCaretRule.Position,
                     LeadingHiddenTokens = codeCaretRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = codeCaretRule.TrailingHiddenTokens,
+                    Indent = codeCaretRule.Indent,
                     Codes = codeCaretRule.Codes,
                     CaretPath = codeCaretRule.CaretPath,
                     Value = codeCaretRule.Value
@@ -1339,6 +1630,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     Position = codeInsertRule.Position,
                     LeadingHiddenTokens = codeInsertRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = codeInsertRule.TrailingHiddenTokens,
+                    Indent = codeInsertRule.Indent,
                     Codes = codeInsertRule.Codes,
                     RuleSetReference = codeInsertRule.RuleSetReference,
                     Parameters = codeInsertRule.Parameters,
@@ -1374,7 +1666,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
 
         if (definition == null && context.MULTILINE_STRING() != null)
         {
-            definition = ExtractString(context.MULTILINE_STRING().GetText());
+            definition = ExtractMulitLineString(context.MULTILINE_STRING().GetText());
         }
 
         return new Concept
@@ -1382,6 +1674,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
+            Indent = GetRuleIndent(context.STAR()),
             Codes = codes,
             Display = display,
             Definition = definition
@@ -1409,6 +1702,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     LeadingHiddenTokens = insertRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = insertRule.TrailingHiddenTokens,
                     Path = insertRule.Path,
+                    Indent = insertRule.Indent,
                     RuleSetReference = insertRule.RuleSetReference,
                     Parameters = insertRule.Parameters,
                     IsParameterized = insertRule.IsParameterized
@@ -1426,7 +1720,8 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
                     Position = pathRule.Position,
                     LeadingHiddenTokens = pathRule.LeadingHiddenTokens,
                     TrailingHiddenTokens = pathRule.TrailingHiddenTokens,
-                    Path = pathRule.Path
+                    Path = pathRule.Path,
+                    Indent = pathRule.Indent
                 };
             }
         }
@@ -1457,6 +1752,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Path = context.path()?.GetText(),
+            Indent = GetRuleIndent(context.STAR()),
             Target = target,
             Language = language,
             Code = code
@@ -1494,7 +1790,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             return new StringValue
             {
                 Position = GetPosition(context),
-                Value = ExtractString(context.MULTILINE_STRING().GetText()),
+                Value = ExtractMulitLineString(context.MULTILINE_STRING().GetText()),
                 IsMultiline = true
             };
         }
@@ -1699,11 +1995,17 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
     private static string ExtractString(string quotedString)
     {
         // Remove quotes from strings
-        if (quotedString.StartsWith("\"") && quotedString.EndsWith("\""))
+        if (quotedString.StartsWith("\"") && quotedString.EndsWith("\"") && quotedString.Length >= 2)
         {
             return quotedString[1..^1];
         }
-        if (quotedString.StartsWith("\"\"\"") && quotedString.EndsWith("\"\"\""))
+        return quotedString;
+    }
+
+    private static string ExtractMulitLineString(string quotedString)
+    {
+        // Remove quotes from strings
+        if (quotedString.StartsWith("\"\"\"") && quotedString.EndsWith("\"\"\"") && quotedString.Length >= 6)
         {
             return quotedString[3..^3];
         }
@@ -1828,6 +2130,54 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         }
 
         return result.Count > 0 ? result : null;
+    }
+
+    /// <summary>
+    /// Extracts inline comment from a STAR token if present.
+    /// STAR tokens can contain LINE_COMMENT at the start due to the pattern: ([\r\n] | LINE_COMMENT) WS* '*'
+    /// Example STAR token: '// inline comment\r\n* '
+    /// Returns the comment text (including //) or null if no comment present.
+    /// </summary>
+    private static string? ExtractInlineCommentFromStarToken(IToken starToken)
+    {
+        if (starToken == null) return null;
+        
+        var text = starToken.Text;
+        if (string.IsNullOrEmpty(text) || !text.StartsWith("//")) return null;
+        
+        // Extract everything from "//" up to (but not including) the newline
+        var newlineIndex = text.IndexOfAny(new[] { '\r', '\n' });
+        if (newlineIndex < 0) return null;
+        
+        return text[..newlineIndex];
+    }
+
+    /// <summary>
+    /// Extracts inline comment from the STAR token of the current rule context
+    /// and attaches it to the previous rule's trailing tokens.
+    /// This handles the case where inline comments after rules (e.g., "* path // comment")
+    /// are absorbed into the NEXT rule's STAR token due to lexer pattern: ([\r\n] | LINE_COMMENT) WS* '*'
+    /// </summary>
+    private void ExtractAndAttachInlineComment(ParserRuleContext currentRuleContext, FshRule? previousRule)
+    {
+        if (previousRule == null || currentRuleContext?.Start == null) return;
+        
+        // The first token of any sd rule is the STAR token
+        var starToken = currentRuleContext.Start;
+        if (starToken.Type != FSHLexer.STAR) return;
+        
+        // Extract inline comment if present
+        var comment = ExtractInlineCommentFromStarToken(starToken);
+        if (string.IsNullOrEmpty(comment)) return;
+        
+        // Attach to previous rule as trailing hidden token
+        // We need to add a space before the comment to separate it from the rule content
+        previousRule.TrailingHiddenTokens ??= new List<HiddenToken>();
+        previousRule.TrailingHiddenTokens.Add(new HiddenToken
+        {
+            TokenType = FSHLexer.LINE_COMMENT,
+            Text = " " + comment  // Prepend space to separate comment from rule content
+        });
     }
 
     #endregion

@@ -12,7 +12,7 @@ grammar FSH;
 options { tokenVocab = FSHLexer; }
 
 doc:                entity* EOF;
-entity:             alias | profile | extension | invariant | instance | valueSet | codeSystem | ruleSet | paramRuleSet | mapping | logical | resource;
+entity:             alias | profile | extension | invariant | instance | valueSet | codeSystem | ruleSet | mapping | logical | resource;
 
 // The CODE token is accepted because the lexer parses URLs with fragments (ex: https://example.org#fragment) as CODEs
 alias:              KW_ALIAS name EQUAL (SEQUENCE | CODE);
@@ -40,13 +40,38 @@ codeSystem:         KW_CODESYSTEM name csMetadata* csRule*;
 csMetadata:         id | title | description;
 csRule:             concept | codeCaretValueRule | codeInsertRule;
 
-ruleSet:            KW_RULESET RULESET_REFERENCE ruleSetRule+;
+ruleSet:            KW_RULESET name (LPAREN ruleSetParamList? RPAREN paramRuleSetContent | ruleSetRule+);
 ruleSetRule:        sdRule | addElementRule | addCRElementRule | concept | codeCaretValueRule | codeInsertRule | vsComponent | mappingRule;
 
-paramRuleSet:       KW_RULESET paramRuleSetRef paramRuleSetContent;
-paramRuleSetRef:    PARAM_RULESET_REFERENCE parameter* lastParameter;
-parameter:          BRACKETED_PARAM | PLAIN_PARAM;
-lastParameter:      LAST_BRACKETED_PARAM | LAST_PLAIN_PARAM;
+// Parameter list handles comma-separated parameters, including empty ones
+// e.g., (param1,,param3,) is valid - param2 and param4 are empty
+ruleSetParamList:   (ruleSetParam | COMMA)+;
+
+ruleSetParam:       MULTILINE_STRING 
+                    | DOUBLE_BRACKET_STRING 
+                    | STRING 
+                    | ruleSetParamText
+                    ;
+
+// Multi-token parameter that can contain various tokens concatenated together
+// The escape handling (e.g., \) and \,) will be processed in the visitor
+ruleSetParamText:   ruleSetParamPart+;
+
+ruleSetParamPart:   SEQUENCE 
+| NUMBER 
+| DATETIME 
+| TIME 
+| mostAlphaKeywords
+| EQUAL
+| COLON
+| STAR
+| CODE
+| LPAREN
+| ARROW
+| SEQUENCE RPAREN  // Captures \) as SEQUENCE(\) followed by RPAREN
+| SEQUENCE COMMA   // Captures \, as SEQUENCE(\) followed by COMMA
+;
+
 paramRuleSetContent:   STAR
                     ~(KW_PROFILE
                     | KW_ALIAS
@@ -76,10 +101,9 @@ instanceOf:         KW_INSTANCEOF name;
 usage:              KW_USAGE CODE;
 source:             KW_SOURCE name;
 target:             KW_TARGET STRING;
-context:            KW_CONTEXT contextItem* lastContextItem;
-contextItem:        QUOTED_CONTEXT | UNQUOTED_CONTEXT;
-lastContextItem:    LAST_QUOTED_CONTEXT | LAST_UNQUOTED_CONTEXT;
-characteristics:    KW_CHARACTERISTICS CODE_ITEM* LAST_CODE_ITEM;
+context:            KW_CONTEXT contextItem (COMMA contextItem)*;
+contextItem:        STRING | SEQUENCE | CODE;
+characteristics:    KW_CHARACTERISTICS code (COMMA code)*;
 
 
 // RULES
@@ -93,8 +117,9 @@ obeysRule:          STAR path? KW_OBEYS name (KW_AND name)*;
 caretValueRule:     STAR path? caretPath EQUAL value;
 codeCaretValueRule: STAR CODE* caretPath EQUAL value;
 mappingRule:        STAR path? ARROW STRING STRING? CODE?;
-insertRule:         STAR path? KW_INSERT (RULESET_REFERENCE | paramRuleSetRef);
-codeInsertRule:     STAR CODE* KW_INSERT (RULESET_REFERENCE | paramRuleSetRef);
+insertRule:         STAR path? KW_INSERT ruleSetInsert;
+ruleSetInsert:      name (LPAREN ruleSetParamList? RPAREN)?;
+codeInsertRule:     STAR CODE* KW_INSERT ruleSetInsert;
 addCRElementRule:   STAR path CARD flag* KW_CONTENTREFERENCE (SEQUENCE | CODE) STRING (STRING | MULTILINE_STRING)?;
 addElementRule:     STAR path CARD flag* targetType (KW_OR targetType)* STRING (STRING | MULTILINE_STRING)?;
 pathRule:           STAR path;

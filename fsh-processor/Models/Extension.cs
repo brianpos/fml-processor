@@ -33,7 +33,7 @@ public class Extension : FshEntity
     /// <summary>
     /// Rules defining the extension
     /// </summary>
-    public List<SdRule> Rules { get; set; } = new();
+    public List<FshRule> Rules { get; set; } = new();
 }
 
 /// <summary>

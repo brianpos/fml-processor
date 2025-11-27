@@ -16,12 +16,13 @@ public class RuleSet : FshEntity
     public List<RuleSetParameter> Parameters { get; set; } = new();
 
     /// <summary>
-    /// Rules in the rule set
+    /// Rules in the rule set (can be any FshRule type)
     /// </summary>
-    public List<RuleSetRule> Rules { get; set; } = new();
+    public List<FshRule> Rules { get; set; } = new();
 
     /// <summary>
     /// For parameterized rule sets, the unparsed content
+    /// This will have template content e.g. {status} that needs to be processed when applying the rule set
     /// </summary>
     public string? UnparsedContent { get; set; }
 }

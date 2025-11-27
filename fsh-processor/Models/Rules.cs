@@ -9,6 +9,12 @@ public abstract class FshRule : FshNode
     /// Path (optional for some rules)
     /// </summary>
     public string? Path { get; set; }
+
+    /// <summary>
+    /// Indent whitespace for all rules
+    /// (before the * character)
+    /// </summary>
+    public required string Indent { get; set; }
 }
 
 // ============================================
@@ -189,10 +195,22 @@ public class PathRule : SdRule
 {
 }
 
+// ============================================
+// LR Rules (for Logical and Resource)
+// ============================================
+
+/// <summary>
+/// Base class for logical/resource rules (includes all SD rules plus add element rules)
+/// </summary>
+public abstract class LrRule : FshRule
+{
+}
+
 /// <summary>
 /// Add element rule (* path Card flag* type+ description?)
+/// For Logical and Resource entities only
 /// </summary>
-public class AddElementRule : SdRule
+public class AddElementRule : LrRule
 {
     /// <summary>
     /// Cardinality
@@ -222,8 +240,9 @@ public class AddElementRule : SdRule
 
 /// <summary>
 /// Add content reference element rule
+/// For Logical and Resource entities only
 /// </summary>
-public class AddCRElementRule : SdRule
+public class AddCRElementRule : LrRule
 {
     /// <summary>
     /// Cardinality
@@ -249,17 +268,6 @@ public class AddCRElementRule : SdRule
     /// Definition (can be multiline)
     /// </summary>
     public string? Definition { get; set; }
-}
-
-// ============================================
-// LR Rules (for Logical and Resource)
-// ============================================
-
-/// <summary>
-/// Base class for logical/resource rules (includes all SD rules plus add element rules)
-/// </summary>
-public abstract class LrRule : FshRule
-{
 }
 
 /// <summary>
@@ -700,12 +708,5 @@ public class MappingPathRule : MappingRule
 // RuleSet Rules
 // ============================================
 
-/// <summary>
-/// Base class for rule set rules (can contain any rule type)
-/// </summary>
-public abstract class RuleSetRule : FshRule
-{
-}
-
-// Note: RuleSets can contain any of the above rule types, so the actual
-// rule instances will be of the specific types defined above
+// Note: RuleSets can contain any FshRule type, so no special RuleSetRule class is needed.
+// RuleSet.Rules is typed as List<FshRule> to allow any rule type.

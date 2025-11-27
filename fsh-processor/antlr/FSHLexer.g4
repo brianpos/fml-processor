@@ -18,7 +18,7 @@ KW_INSTANCEOF:      'InstanceOf' WS* ':';
 KW_INVARIANT:       'Invariant' WS* ':';
 KW_VALUESET:        'ValueSet' WS* ':';
 KW_CODESYSTEM:      'CodeSystem' WS* ':';
-KW_RULESET:         'RuleSet' WS* ':' -> pushMode(RULESET_OR_INSERT);
+KW_RULESET:         'RuleSet' WS* ':';
 KW_MAPPING:         'Mapping' WS* ':';
 KW_LOGICAL:         'Logical' WS* ':';
 KW_RESOURCE:        'Resource' WS* ':';
@@ -32,8 +32,8 @@ KW_SEVERITY:        'Severity' WS* ':';
 KW_USAGE:           'Usage' WS* ':';
 KW_SOURCE:          'Source' WS* ':';
 KW_TARGET:          'Target' WS* ':';
-KW_CONTEXT:         'Context' WS* ':' -> pushMode(LIST_OF_CONTEXTS);
-KW_CHARACTERISTICS: 'Characteristics' WS* ':' -> pushMode(LIST_OF_CODES);
+KW_CONTEXT:         'Context' WS* ':';
+KW_CHARACTERISTICS: 'Characteristics' WS* ':';
 KW_MOD:             '?!';
 KW_MS:              'MS';
 KW_SU:              'SU';
@@ -60,7 +60,7 @@ KW_WHERE:           'where';
 KW_VSREFERENCE:     'valueset';
 KW_SYSTEM:          'system';
 KW_EXACTLY:         '(' WS* 'exactly' WS* ')';
-KW_INSERT:          'insert' -> pushMode(RULESET_OR_INSERT);
+KW_INSERT:          'insert';
 KW_CONTENTREFERENCE:'contentReference';
 
 // SYMBOLS
@@ -69,14 +69,20 @@ STAR:               ([\r\n] | LINE_COMMENT) WS* '*' [ \u00A0];
 COLON:              ':';
 COMMA:              ',';
 ARROW:              '->';
+LPAREN:             '(';
+RPAREN:             ')';
 
 // PATTERNS
 
-                 //  "    CHARS    "
-STRING:             '"' (~[\\"] | '\\u' | '\\r' | '\\n' | '\\t' | '\\"' | '\\\\')* '"';
+                 //  "    CHARS    " -- workaround for parameters to ruleset handling
+STRING:             '"' (~[\\"] | '\\' .)* '"';
+
 
                  //  """ CHARS """
 MULTILINE_STRING:   '"""' .*? '"""';
+
+                 //  [[  CHARS  ]]
+DOUBLE_BRACKET_STRING: '[[' .*? ']]';
 
                  //  +/- ? DIGITS( .  DIGITS)? (e/E   +/- ? DIGITS)?
 NUMBER:             [+\-]? [0-9]+('.' [0-9]+)? ([eE] [+\-]? [0-9]+)?;
@@ -115,7 +121,7 @@ CARET_SEQUENCE:     '^' NONWS+;
 REGEX:              '/' ('\\/' | ~[*/\r\n])('\\/' | ~[/\r\n])* '/';
 
 // BLOCK_COMMENT must precede SEQUENCE so that a block comment without whitespace does not become a SEQUENCE
-BLOCK_COMMENT:      '/*' .*? '*/' -> skip;
+BLOCK_COMMENT:      '/*' .*? '*/' -> channel(HIDDEN);
                  // NON-WHITESPACE
 SEQUENCE:           NONWS+;
 
@@ -123,32 +129,9 @@ SEQUENCE:           NONWS+;
 
 // FRAGMENTS
 fragment WS: [ \t\r\n\f\u00A0];
-fragment NONWS: ~[ \t\r\n\f\u00A0];
+fragment NONWS: ~[ \t\r\n\f\u00A0(),];
 fragment NONWS_STR: ~[ \t\r\n\f\u00A0\\"];
 
 // IGNORED TOKENS
 WHITESPACE:         WS -> channel(HIDDEN);
-LINE_COMMENT:       '//' ~[\r\n]* [\r\n] -> skip;
-
-mode RULESET_OR_INSERT;
-PARAM_RULESET_REFERENCE:      WS* RSNONWS+ WS* '(' -> pushMode(PARAM_RULESET_OR_INSERT);
-RULESET_REFERENCE:            WS* RSNONWS+ -> popMode;
-fragment RSNONWS: ~[ \t\r\n\f\u00A0(];
-
-mode PARAM_RULESET_OR_INSERT;
-BRACKETED_PARAM: WS* '[[' ( ~[\]] | (']'~[\]]) | (']]' WS* ~[,) \t\r\n\f\u00A0]) )+ ']]' WS* ',';
-LAST_BRACKETED_PARAM: WS* '[[' ( ~[\]] | (']'~[\]]) | (']]' WS* ~[,) \t\r\n\f\u00A0]) )+ ']]' WS* ')' -> popMode, popMode;
-PLAIN_PARAM: WS* ('\\)' | '\\,' | '\\\\' | ~[),])* WS* ',';
-LAST_PLAIN_PARAM: WS* ('\\)' | '\\,' | '\\\\' | ~[),])* WS* ')' -> popMode, popMode;
-
-mode LIST_OF_CONTEXTS;
-QUOTED_CONTEXT: STRING WS* ',';
-LAST_QUOTED_CONTEXT: STRING -> popMode;
-UNQUOTED_CONTEXT: (SEQUENCE | CODE) WS* ',';
-LAST_UNQUOTED_CONTEXT: (SEQUENCE | CODE) -> popMode;
-CONTEXT_WHITESPACE: WS -> channel(HIDDEN);
-
-mode LIST_OF_CODES;
-CODE_ITEM: CODE WS* ',';
-LAST_CODE_ITEM: CODE -> popMode;
-CODE_LIST_WHITESPACE: WS -> channel(HIDDEN);
+LINE_COMMENT:       '//' ~[\r\n]* -> channel(HIDDEN);

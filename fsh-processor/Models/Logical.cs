@@ -31,7 +31,7 @@ public class Logical : FshEntity
     public List<string> Characteristics { get; set; } = new();
 
     /// <summary>
-    /// Rules defining the logical model
+    /// Rules defining the logical model (can include SD rules and LR-specific rules)
     /// </summary>
-    public List<LrRule> Rules { get; set; } = new();
+    public List<FshRule> Rules { get; set; } = new();
 }

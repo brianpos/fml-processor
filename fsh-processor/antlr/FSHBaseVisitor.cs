@@ -279,7 +279,7 @@ public partial class FSHBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, 
 	/// <return>The visitor result.</return>
 	public virtual Result VisitRuleSetRule([NotNull] FSHParser.RuleSetRuleContext context) { return VisitChildren(context); }
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.paramRuleSet"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParamList"/>.
 	/// <para>
 	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
 	/// on <paramref name="context"/>.
@@ -287,9 +287,9 @@ public partial class FSHBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, 
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	public virtual Result VisitParamRuleSet([NotNull] FSHParser.ParamRuleSetContext context) { return VisitChildren(context); }
+	public virtual Result VisitRuleSetParamList([NotNull] FSHParser.RuleSetParamListContext context) { return VisitChildren(context); }
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.paramRuleSetRef"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParam"/>.
 	/// <para>
 	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
 	/// on <paramref name="context"/>.
@@ -297,9 +297,9 @@ public partial class FSHBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, 
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	public virtual Result VisitParamRuleSetRef([NotNull] FSHParser.ParamRuleSetRefContext context) { return VisitChildren(context); }
+	public virtual Result VisitRuleSetParam([NotNull] FSHParser.RuleSetParamContext context) { return VisitChildren(context); }
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.parameter"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParamText"/>.
 	/// <para>
 	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
 	/// on <paramref name="context"/>.
@@ -307,9 +307,9 @@ public partial class FSHBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, 
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	public virtual Result VisitParameter([NotNull] FSHParser.ParameterContext context) { return VisitChildren(context); }
+	public virtual Result VisitRuleSetParamText([NotNull] FSHParser.RuleSetParamTextContext context) { return VisitChildren(context); }
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.lastParameter"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParamPart"/>.
 	/// <para>
 	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
 	/// on <paramref name="context"/>.
@@ -317,7 +317,7 @@ public partial class FSHBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, 
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	public virtual Result VisitLastParameter([NotNull] FSHParser.LastParameterContext context) { return VisitChildren(context); }
+	public virtual Result VisitRuleSetParamPart([NotNull] FSHParser.RuleSetParamPartContext context) { return VisitChildren(context); }
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="FSHParser.paramRuleSetContent"/>.
 	/// <para>
@@ -489,16 +489,6 @@ public partial class FSHBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, 
 	/// <return>The visitor result.</return>
 	public virtual Result VisitContextItem([NotNull] FSHParser.ContextItemContext context) { return VisitChildren(context); }
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.lastContextItem"/>.
-	/// <para>
-	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
-	/// on <paramref name="context"/>.
-	/// </para>
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	public virtual Result VisitLastContextItem([NotNull] FSHParser.LastContextItemContext context) { return VisitChildren(context); }
-	/// <summary>
 	/// Visit a parse tree produced by <see cref="FSHParser.characteristics"/>.
 	/// <para>
 	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
@@ -618,6 +608,16 @@ public partial class FSHBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, 
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	public virtual Result VisitInsertRule([NotNull] FSHParser.InsertRuleContext context) { return VisitChildren(context); }
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetInsert"/>.
+	/// <para>
+	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
+	/// on <paramref name="context"/>.
+	/// </para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	public virtual Result VisitRuleSetInsert([NotNull] FSHParser.RuleSetInsertContext context) { return VisitChildren(context); }
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="FSHParser.codeInsertRule"/>.
 	/// <para>

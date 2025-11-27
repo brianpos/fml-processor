@@ -180,29 +180,29 @@ public interface IFSHVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitRuleSetRule([NotNull] FSHParser.RuleSetRuleContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.paramRuleSet"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParamList"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitParamRuleSet([NotNull] FSHParser.ParamRuleSetContext context);
+	Result VisitRuleSetParamList([NotNull] FSHParser.RuleSetParamListContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.paramRuleSetRef"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParam"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitParamRuleSetRef([NotNull] FSHParser.ParamRuleSetRefContext context);
+	Result VisitRuleSetParam([NotNull] FSHParser.RuleSetParamContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.parameter"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParamText"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitParameter([NotNull] FSHParser.ParameterContext context);
+	Result VisitRuleSetParamText([NotNull] FSHParser.RuleSetParamTextContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.lastParameter"/>.
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetParamPart"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitLastParameter([NotNull] FSHParser.LastParameterContext context);
+	Result VisitRuleSetParamPart([NotNull] FSHParser.RuleSetParamPartContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="FSHParser.paramRuleSetContent"/>.
 	/// </summary>
@@ -306,12 +306,6 @@ public interface IFSHVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitContextItem([NotNull] FSHParser.ContextItemContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="FSHParser.lastContextItem"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitLastContextItem([NotNull] FSHParser.LastContextItemContext context);
-	/// <summary>
 	/// Visit a parse tree produced by <see cref="FSHParser.characteristics"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
@@ -383,6 +377,12 @@ public interface IFSHVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	Result VisitInsertRule([NotNull] FSHParser.InsertRuleContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="FSHParser.ruleSetInsert"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRuleSetInsert([NotNull] FSHParser.RuleSetInsertContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="FSHParser.codeInsertRule"/>.
 	/// </summary>

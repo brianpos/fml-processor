@@ -28,5 +28,5 @@ public class Profile : FshEntity
     /// <summary>
     /// Rules defining the profile
     /// </summary>
-    public List<SdRule> Rules { get; set; } = new();
+    public List<FshRule> Rules { get; set; } = new();
 }
