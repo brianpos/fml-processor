@@ -29,11 +29,11 @@ description""""""
         
         // The description should NOT contain the triple quotes
         Assert.IsNotNull(profile.Description, "Description should not be null");
-        Assert.IsFalse(profile.Description.StartsWith("\"\"\""), "Description should not start with triple quotes");
-        Assert.IsFalse(profile.Description.EndsWith("\"\"\""), "Description should not end with triple quotes");
+        Assert.IsFalse(profile.Description.Value.StartsWith("\"\"\""), "Description should not start with triple quotes");
+        Assert.IsFalse(profile.Description.Value.EndsWith("\"\"\""), "Description should not end with triple quotes");
         
         // Normalize line endings for comparison (Windows uses \r\n)
-        var normalizedDescription = profile.Description.Replace("\r\n", "\n");
+        var normalizedDescription = profile.Description.Value.Replace("\r\n", "\n");
         Assert.AreEqual("This is a\nmultiline\ndescription", normalizedDescription, "Description should be extracted correctly");
     }
 
@@ -57,9 +57,9 @@ Description: ""This is a single line description""
         
         // The description should NOT contain the quotes
         Assert.IsNotNull(profile.Description, "Description should not be null");
-        Assert.IsFalse(profile.Description.StartsWith("\""), "Description should not start with quote");
-        Assert.IsFalse(profile.Description.EndsWith("\""), "Description should not end with quote");
-        Assert.AreEqual("This is a single line description", profile.Description, "Description should be extracted correctly");
+        Assert.IsFalse(profile.Description.Value.StartsWith("\""), "Description should not start with quote");
+        Assert.IsFalse(profile.Description.Value.EndsWith("\""), "Description should not end with quote");
+        Assert.AreEqual("This is a single line description", profile.Description.Value, "Description should be extracted correctly");
     }
 
     [TestMethod]
@@ -91,6 +91,6 @@ description""""""
         
         Assert.IsNotNull(originalProfile, "Original should be a Profile");
         Assert.IsNotNull(reParsedProfile, "Re-parsed should be a Profile");
-        Assert.AreEqual(originalProfile.Description, reParsedProfile.Description, "Descriptions should match after round-trip");
+        Assert.AreEqual(originalProfile.Description.Value, reParsedProfile.Description.Value, "Descriptions should match after round-trip");
     }
 }

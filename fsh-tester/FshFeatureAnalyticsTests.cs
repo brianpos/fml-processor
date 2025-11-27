@@ -560,9 +560,9 @@ public class FshFeatureAnalytics
         switch (entity)
         {
             case Profile p:
-                if (!string.IsNullOrEmpty(p.Id)) EntitiesWithId++;
-                if (!string.IsNullOrEmpty(p.Title)) EntitiesWithTitle++;
-                if (!string.IsNullOrEmpty(p.Description)) EntitiesWithDescription++;
+                if (!string.IsNullOrEmpty(p.Id?.Value)) EntitiesWithId++;
+                if (!string.IsNullOrEmpty(p.Title?.Value)) EntitiesWithTitle++;
+                if (!string.IsNullOrEmpty(p.Description?.Value)) EntitiesWithDescription++;
                 break;
             case Extension e:
                 if (!string.IsNullOrEmpty(e.Id)) EntitiesWithId++;

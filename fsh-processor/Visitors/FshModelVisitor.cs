@@ -31,7 +31,6 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         {
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
-            TrailingHiddenTokens = GetEofHiddenTokens(context)
         };
 
         // Visit all entities
@@ -44,6 +43,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
             }
         }
 
+        doc.TrailingHiddenTokens = GetEofHiddenTokens(context);
         return doc;
     }
 

@@ -8,6 +8,17 @@ public abstract class FshValue : FshNode
 }
 
 /// <summary>
+/// Metadata value (for id, title, description, etc.)
+/// </summary>
+public class Metadata : FshValue
+{
+    /// <summary>
+    /// The name/identifier
+    /// </summary>
+    public string Value { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// String value
 /// </summary>
 public class StringValue : FshValue

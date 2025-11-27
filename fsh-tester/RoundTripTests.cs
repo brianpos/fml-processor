@@ -36,6 +36,11 @@ Description: ""A simple patient profile for testing""
         var serialized = FshSerializer.Serialize(doc);
         Assert.IsNotNull(serialized);
 
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse the serialized output
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -60,10 +65,10 @@ Description: ""A simple patient profile for testing""
         Assert.IsNotNull(profile);
         Assert.IsNotNull(reparsedProfile);
         Assert.AreEqual(profile.Name, reparsedProfile.Name);
-        Assert.AreEqual(profile.Parent, reparsedProfile.Parent);
-        Assert.AreEqual(profile.Id, reparsedProfile.Id);
-        Assert.AreEqual(profile.Title, reparsedProfile.Title);
-        Assert.AreEqual(profile.Description, reparsedProfile.Description);
+        Assert.AreEqual(profile.Parent.Value, reparsedProfile.Parent.Value);
+        Assert.AreEqual(profile.Id.Value, reparsedProfile.Id.Value);
+        Assert.AreEqual(profile.Title.Value, reparsedProfile.Title.Value);
+        Assert.AreEqual(profile.Description.Value, reparsedProfile.Description.Value);
         Assert.AreEqual(profile.Rules.Count, reparsedProfile.Rules.Count);
     }
 
@@ -77,9 +82,17 @@ Description: ""A simple patient profile for testing""
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Verify the alias is properly formatted
         Assert.IsTrue(serialized.Contains("Alias: $SCT = http://snomed.info/sct"));
+
+        // Now assert that the actual strings are identical, that's our ultimate goal here!
+        Assert.AreEqual(fshText.TrimEnd(), serialized.TrimEnd(), "Raw text is the same");
     }
 
     [TestMethod]
@@ -100,7 +113,12 @@ Description: ""Test profile""
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Verify key elements are present
         Assert.IsTrue(serialized.Contains("Profile: MyProfile"));
         Assert.IsTrue(serialized.Contains("Parent: Patient"));
@@ -129,7 +147,12 @@ Context: Patient, Observation
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse and verify
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -159,7 +182,12 @@ Title: ""My Patient Instance""
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse and verify
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -188,7 +216,12 @@ Title: ""My ValueSet""
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse and verify
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -216,7 +249,12 @@ Title: ""My CodeSystem""
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse and verify
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -227,27 +265,6 @@ Title: ""My CodeSystem""
         Assert.AreEqual("MyCodeSystem", cs.Name);
         Assert.AreEqual(3, cs.Rules.Count);
     }
-
-    [TestMethod]
-    public void TestParseOperationParameters()
-    {
-        var fshText = @"Instance: Questionnaire-populatelink
-InstanceOf: OperationDefinition
-Usage: #definition
-* parameter[+]
-  * insert parameter(#identifier, #in, 0, ""1"", #Identifier, ""A logical questionnaire identifier (i.e. `Questionnaire.identifier`\). The server must know the questionnaire or be able to retrieve it from other known repositories."")
-";
-
-        var result = FshParser.Parse(fshText);
-        Assert.IsInstanceOfType<ParseResult.Success>(result);
-
-        var doc = ((ParseResult.Success)result).Document;
-        var instance = doc.Entities[0] as Instance;
-        Assert.IsNotNull(instance);
-        Assert.AreEqual("Questionnaire-populatelink", instance.Name);
-        Assert.AreEqual("OperationDefinition", instance.InstanceOf);
-    }
-
 
     [TestMethod]
     public void TestSerializeLogical()
@@ -266,7 +283,12 @@ Characteristics: #can-be-target
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse and verify
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -389,7 +411,12 @@ Target: ""http://example.org/target""
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse and verify
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -429,7 +456,12 @@ Parent: Patient
         
         // Serialize and verify comments preserved
         var serialized = FshSerializer.Serialize(doc);
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
         Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         Assert.IsTrue(serialized.Contains("// Header comment"));
         Assert.IsTrue(serialized.Contains("// inline comment"));
         Assert.IsTrue(serialized.Contains("// Profile comment"));
@@ -467,7 +499,12 @@ Id: my-observation
         Console.WriteLine("=== END ORIGINAL RULES ===");
         
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
@@ -475,11 +512,6 @@ Id: my-observation
         var reparsedDoc = ((ParseResult.Success)reParseResult).Document;
         var profile = reparsedDoc.Entities[0] as Profile;
         Assert.IsNotNull(profile);
-
-        // DEBUG: Output what was serialized
-        Console.WriteLine("=== SERIALIZED OUTPUT ===");
-        Console.WriteLine(serialized);
-        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
 
         // Verify all rules preserved
         Assert.AreEqual(7, profile.Rules.Count);
@@ -583,26 +615,41 @@ Id: my-observation
     public void TestTextBasedRoundTrip()
     {
         // Text-based comparison - verify serialized output can be re-parsed to same structure
-        var fshText = @"Profile: MyProfile
-Parent: Patient
+        var fshText = @"Profile: MyProfile /* test 1 */
+Parent: Patient // test 2
 
-* name 1..1 MS
-* identifier 0..* MS
+// test 3
+* name 1..1 MS // test 4
+* identifier 0..* MS // test 5
 ";
+
+        Console.WriteLine("=== INPUT ===");
+        Console.WriteLine(fshText);
+        Console.WriteLine("=== END INPUT ===");
 
         var result = FshParser.Parse(fshText);
         Assert.IsInstanceOfType<ParseResult.Success>(result);
         
         var doc = ((ParseResult.Success)result).Document;
         var serialized = FshSerializer.Serialize(doc);
-        
+
+        // DEBUG: Output what was serialized
+        Console.WriteLine("=== SERIALIZED OUTPUT ===");
+        Console.WriteLine(serialized);
+        Console.WriteLine("=== END SERIALIZED OUTPUT ===");
+
         // Re-parse
         var reParseResult = FshParser.Parse(serialized);
         Assert.IsInstanceOfType<ParseResult.Success>(reParseResult);
         
         // Serialize again
         var reserialized = FshSerializer.Serialize(((ParseResult.Success)reParseResult).Document);
-        
+
+        // DEBUG: Output what was reserialized
+        Console.WriteLine("=== RE-SERIALIZED OUTPUT ===");
+        Console.WriteLine(reserialized);
+        Console.WriteLine("=== END RE-SERIALIZED OUTPUT ===");
+
         // Normalize whitespace for comparison
         var normalized1 = NormalizeWhitespace(serialized);
         var normalized2 = NormalizeWhitespace(reserialized);
@@ -645,7 +692,7 @@ Parent: Patient
     private static string NormalizeWhitespace(string text)
     {
         // Normalize line endings
-        text = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        text = text.Replace("\r", "");
         
         // Normalize multiple blank lines to single blank line
         while (text.Contains("\n\n\n"))
@@ -660,7 +707,7 @@ Parent: Patient
             lines[i] = lines[i].TrimEnd();
         }
         
-        return string.Join('\n', lines).Trim();
+        return string.Join("\r\n", lines).Trim();
     }
 
     #endregion

@@ -8,22 +8,22 @@ public class Profile : FshEntity
     /// <summary>
     /// Parent profile/resource
     /// </summary>
-    public string? Parent { get; set; }
+    public Metadata? Parent { get; set; }
 
     /// <summary>
     /// Id for the profile
     /// </summary>
-    public string? Id { get; set; }
+    public Metadata? Id { get; set; }
 
     /// <summary>
     /// Title
     /// </summary>
-    public string? Title { get; set; }
+    public Metadata? Title { get; set; }
 
     /// <summary>
     /// Description
     /// </summary>
-    public string? Description { get; set; }
+    public Metadata? Description { get; set; }
 
     /// <summary>
     /// Rules defining the profile

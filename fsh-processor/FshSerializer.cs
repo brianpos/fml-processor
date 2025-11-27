@@ -132,23 +132,29 @@ public static class FshSerializer
         if (profile.Parent != null)
         {
             sb.Append("Parent: ");
-            sb.AppendLine(profile.Parent);
+            sb.Append(profile.Parent.Value);
+            OutputTrailingHiddenTokens(sb, profile.Parent);
+            sb.AppendLine();
         }
         if (profile.Id != null)
         {
             sb.Append("Id: ");
-            sb.AppendLine(profile.Id);
+            sb.Append(profile.Id.Value);
+            OutputTrailingHiddenTokens(sb, profile.Id);
+            sb.AppendLine();
         }
         if (profile.Title != null)
         {
             sb.Append("Title: ");
-            SerializeQuotedString(sb, profile.Title);
+            SerializeQuotedString(sb, profile.Title.Value);
+            OutputTrailingHiddenTokens(sb, profile.Title);
             sb.AppendLine();
         }
         if (profile.Description != null)
         {
             sb.Append("Description: ");
-            SerializeQuotedString(sb, profile.Description);
+            SerializeQuotedString(sb, profile.Description.Value);
+            OutputTrailingHiddenTokens(sb, profile.Description);
             sb.AppendLine();
         }
     }

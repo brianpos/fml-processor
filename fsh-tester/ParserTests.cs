@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using fsh_processor;
 using fsh_processor.Models;
 
 namespace fsh_tester
@@ -6,6 +7,27 @@ namespace fsh_tester
     [TestClass]
     public sealed class ParserTests
     {
+
+        [TestMethod]
+        public void TestParseOperationParameters()
+        {
+            var fshText = @"Instance: Questionnaire-populatelink
+InstanceOf: OperationDefinition
+Usage: #definition
+* parameter[+]
+  * insert parameter(#identifier, #in, 0, ""1"", #Identifier, ""A logical questionnaire identifier (i.e. `Questionnaire.identifier`\). The server must know the questionnaire or be able to retrieve it from other known repositories."")
+";
+
+            var result = FshParser.Parse(fshText);
+            Assert.IsInstanceOfType<ParseResult.Success>(result);
+
+            var doc = ((ParseResult.Success)result).Document;
+            var instance = doc.Entities[0] as Instance;
+            Assert.IsNotNull(instance);
+            Assert.AreEqual("Questionnaire-populatelink", instance.Name);
+            Assert.AreEqual("OperationDefinition", instance.InstanceOf);
+        }
+
         [TestMethod]
         public void ParseSDCIgSourceFiles()
         {
@@ -144,6 +166,10 @@ namespace fsh_tester
             string fshContent = File.ReadAllText(fshFile);
             var result = fsh_processor.FshParser.Parse(fshContent);
 
+            Console.WriteLine("=== INPUT ===");
+            Console.WriteLine(fshContent);
+            Console.WriteLine("=== END INPUT ===");
+
             Assert.IsNotNull(result);
 
             if (result is ParseResult.Success success)
@@ -169,6 +195,16 @@ namespace fsh_tester
                 }
 
                 Assert.IsTrue(success.Document.Entities.Count > 0, "Should have parsed at least one entity");
+
+                var reserialized = FshSerializer.Serialize(success.Document);
+
+                // DEBUG: Output what was reserialized
+                Console.WriteLine("=== RE-SERIALIZED OUTPUT ===");
+                Console.WriteLine(reserialized);
+                Console.WriteLine("=== END RE-SERIALIZED OUTPUT ===");
+                // And test writing it back out again too!
+
+
             }
             else if (result is ParseResult.Failure failure)
             {
