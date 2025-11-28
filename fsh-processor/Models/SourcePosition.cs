@@ -5,6 +5,11 @@ namespace fsh_processor.Models;
 /// </summary>
 public record SourcePosition
 {
+    public override string ToString()
+    {
+        return $"{StartLine}-{StartColumn}";
+    }
+
     /// <summary>
     /// Starting line number (1-based)
     /// </summary>

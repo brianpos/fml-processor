@@ -158,6 +158,67 @@ Usage: #definition
         }
 
         [TestMethod]
+        public void ParseSingleFile_shared()
+        {
+            string fshFile = Path.Combine("C:\\git\\hl7\\sdc", "input", "fsh", "shared.fsh");
+            Assert.IsTrue(File.Exists(fshFile), $"Test file not found: {fshFile}");
+
+            string fshContent = File.ReadAllText(fshFile);
+            var result = fsh_processor.FshParser.Parse(fshContent);
+
+            Assert.IsNotNull(result);
+
+            if (result is ParseResult.Success success)
+            {
+                Console.WriteLine($"\nParsed {success.Document.Entities.Count} entities from shared.fsh:");
+
+                foreach (var entity in success.Document.Entities)
+                {
+                    var entityType = entity.GetType().Name;
+                    Console.WriteLine($"  {entityType}: {entity.Name}");
+
+                    // Show some details for profiles
+                    if (entity is Profile profile)
+                    {
+                        Console.WriteLine($"    Parent: {profile.Parent}");
+                        Console.WriteLine($"    Id: {profile.Id}");
+                        Console.WriteLine($"    Rules: {profile.Rules.Count}");
+                    }
+                    else if (entity is Invariant inv)
+                    {
+                        Console.WriteLine($"    Severity: {inv.Severity}");
+                    }
+                    else if (entity is RuleSet rs)
+                    {
+                        Console.WriteLine($"    Parameters: {String.Join(", ", rs.Parameters?.Select(p => p.Value) ?? [])}");
+                        if (rs.UnparsedContent != null)
+                        {
+                            Console.Write($"    Unparsed Content Length: {rs.UnparsedContent.Length}");
+                            Console.WriteLine($"        {String.Join("        ", rs.UnparsedContent.Split("\n"))}");
+                            Console.WriteLine();
+                        }
+                        else
+                        {
+                            Console.WriteLine($"    * Rules: {rs.Rules.Count}");
+                        }
+                    }
+                }
+
+                Assert.IsTrue(success.Document.Entities.Count > 0, "Should have parsed at least one entity");
+            }
+            else if (result is ParseResult.Failure failure)
+            {
+                var errorDetails = new StringBuilder();
+                errorDetails.AppendLine("Parse errors:");
+                foreach (var error in failure.Errors)
+                {
+                    errorDetails.AppendLine($"  Line {error.Line}:{error.Column} - {error.Message}");
+                }
+                Assert.Fail(errorDetails.ToString());
+            }
+        }
+
+        [TestMethod]
         public void ParseSingleFile_SDCLibrary()
         {
             string fshFile = Path.Combine("C:\\git\\hl7\\sdc", "input", "fsh", "profiles", "SDCLibrary.fsh");
