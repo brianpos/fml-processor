@@ -899,7 +899,7 @@ public class FshModelVisitor : FSHBaseVisitor<object?>
         var newlineIndex = text.IndexOfAny(new[] { '\r', '\n' });
         text = text.TrimEnd(); // remove any trailing whitespace
         text = text.TrimEnd('*'); // remove the star token
-        if (newlineIndex > 0)
+        if (newlineIndex >= 0)
         {
             text = text.Substring(newlineIndex).TrimStart('\r','\n'); // remove any leading newlines
         }

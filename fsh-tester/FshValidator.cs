@@ -1,5 +1,7 @@
 using fsh_processor;
+using fsh_processor.Engine;
 using fsh_processor.Models;
+using Hl7.Fhir.Serialization;
 using Hl7.Fhir.Utility;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Data;
@@ -83,7 +85,7 @@ public class FshValidationTests
 
         // Now we have all the FSH files loaded, lets start actually processing the content
         // Scan for all the aliases
-        Console.WriteLine();
+        // Console.WriteLine();
         Dictionary<string, string> aliasDict = new();
         var aliases = fshDocs.SelectMany(f => f.Entities.OfType<Alias>());
         foreach (var alias in aliases)
@@ -108,21 +110,21 @@ public class FshValidationTests
             if (!rsDict.ContainsKey(rs.Name))
             {
                 rsDict.Add(rs.Name, rs);
-                if (rs.Parameters != null)
+                if (rs.IsParameterized)
                     Console.WriteLine($"{rs.Name}({String.Join(", ", rs.Parameters?.Select(p => p.Value) ?? [])}) {rs.Annotation<FileInfo>()?.Name}");
                 else
                     Console.WriteLine($"{rs.Name}  {rs.Annotation<FileInfo>()?.Name}");
 
-                if (rs.UnparsedContent != null)
-                {
-                    Console.Write($"    Unparsed Content Length: {rs.UnparsedContent.Length}");
-                    Console.WriteLine($"        {String.Join("        ", rs.UnparsedContent.Split("\n"))}");
-                    Console.WriteLine();
-                }
-                else
-                {
-                    Console.WriteLine($"    * Rules: {rs.Rules.Count}");
-                }
+                //if (rs.UnparsedContent != null)
+                //{
+                //    Console.Write($"    Unparsed Content Length: {rs.UnparsedContent.Length}");
+                //    Console.WriteLine($"        {String.Join("        ", rs.UnparsedContent.Split("\n"))}");
+                //    Console.WriteLine();
+                //}
+                //else
+                //{
+                //    Console.WriteLine($"    * Rules: {rs.Rules.Count}");
+                //}
             }
             else
             {
@@ -141,17 +143,10 @@ public class FshValidationTests
                 {
                     if (rule is InsertRule rsRule)
                     {
-                        Console.WriteLine($"  Found RuleSetRule: {rsRule.RuleSetReference}");
+                        // Console.WriteLine($"  Found RuleSetRule: {rsRule.RuleSetReference}");
                         if (rsDict.ContainsKey(rsRule.RuleSetReference))
                         {
                             var ruleSet = rsDict[rsRule.RuleSetReference];
-                            Console.WriteLine($"    Expanding RuleSet: {ruleSet.Name}");
-                            // Here we would perform the actual rule expansion and substitution
-                            // For this example, we just print out the rules
-                            foreach (var rsSubRule in ruleSet.Rules)
-                            {
-                                Console.WriteLine($"      Injecting Rule: {rsSubRule.ToString()}");
-                            }
                             if (ruleSet.UnparsedContent != null)
                             {
                                 var content = ruleSet.UnparsedContent;
@@ -179,9 +174,9 @@ public class FshValidationTests
                                 // update the indentation to match that of the InsertRule that it will replace.
                                 var lines = content.Split('\n').Select(t => t.TrimEnd()).Where(l => !string.IsNullOrEmpty(l));
                                 content = String.Join(rsRule.Indent, lines);
-                                Console.WriteLine("----");
-                                Console.WriteLine(content);
-                                Console.WriteLine("----");
+                                //Console.WriteLine("----");
+                                //Console.WriteLine(content);
+                                //Console.WriteLine("----");
 
                                 // parse this content to put into the resource
                                 var fakeProfile = $"Profile: FakeProfile\r\nTitle: \"Fake Title\"\r\n{content}";
@@ -191,7 +186,7 @@ public class FshValidationTests
                                     var fakeRules = successBit.Document.Entities.OfType<Profile>().First().Rules;
                                     foreach (var fr in fakeRules)
                                     {
-                                        Console.WriteLine($"      Injecting Parsed Rule: {fr.ToString()}");
+                                        // Console.WriteLine($"      Injecting Parsed Rule: {fr.ToString()}");
                                         fr.SetAnnotation(ruleSet.Annotation<FileInfo>());
                                         fr.SetAnnotation(rsRule); // the rule we came from (since we'll be removing it from the collection)
                                     }
@@ -200,6 +195,9 @@ public class FshValidationTests
                                 }
                                 else if (resultBit is ParseResult.Failure failureBit)
                                 {
+                                    Console.WriteLine("----");
+                                    Console.WriteLine(content);
+                                    Console.WriteLine("----");
                                     Console.WriteLine($"    Error parsing injected RuleSet content for {ruleSet.Name}:");
                                     foreach (var err in failureBit.Errors)
                                     {
@@ -214,9 +212,15 @@ public class FshValidationTests
                         }
                     }
                 }
+
+                // Now convert this to a StructureDefintion
+                var sd = ConvertToProfile.Convert(p);
+                Console.WriteLine(sd.ToJson(new FhirJsonSerializationSettings() { Pretty = true }));
                 Console.WriteLine();
             }
         }
+
+        // Do alias substitutions happen during evaluation, or on the rules themselves?
     }
 
     #region Helper Methods
