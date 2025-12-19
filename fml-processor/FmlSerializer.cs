@@ -128,7 +128,7 @@ public static class FmlSerializer
         return sb.ToString();
     }
 
-    private static void SerializeMetadata(StringBuilder sb, MetadataDeclaration metadata)
+    public static void SerializeMetadata(StringBuilder sb, MetadataDeclaration metadata)
     {
         // Output leading hidden tokens (comments before metadata)
         OutputLeadingHiddenTokens(sb, metadata, string.Empty);
@@ -159,7 +159,7 @@ public static class FmlSerializer
         sb.AppendLine();
     }
 
-    private static void SerializeConceptMap(StringBuilder sb, ConceptMapDeclaration conceptMap)
+    public static void SerializeConceptMap(StringBuilder sb, ConceptMapDeclaration conceptMap)
     {
         sb.Append("conceptmap ");
         SerializeUrl(sb, conceptMap.Url);
@@ -193,7 +193,7 @@ public static class FmlSerializer
         sb.AppendLine("}");
     }
 
-    private static void SerializeMapDeclaration(StringBuilder sb, MapDeclaration mapDecl)
+    public static void SerializeMapDeclaration(StringBuilder sb, MapDeclaration mapDecl)
     {
         // Output leading hidden tokens
         OutputLeadingHiddenTokens(sb, mapDecl, string.Empty);
@@ -207,7 +207,7 @@ public static class FmlSerializer
         OutputTrailingHiddenTokens(sb, mapDecl);
     }
 
-    private static void SerializeStructure(StringBuilder sb, StructureDeclaration structure)
+    public static void SerializeStructure(StringBuilder sb, StructureDeclaration structure)
     {
         // Output leading hidden tokens
         OutputLeadingHiddenTokens(sb, structure, string.Empty);
@@ -230,7 +230,7 @@ public static class FmlSerializer
         sb.AppendLine();
     }
 
-    private static void SerializeImport(StringBuilder sb, ImportDeclaration import)
+    public static void SerializeImport(StringBuilder sb, ImportDeclaration import)
     {
         // Output leading hidden tokens
         OutputLeadingHiddenTokens(sb, import, string.Empty);
@@ -244,7 +244,7 @@ public static class FmlSerializer
         sb.AppendLine();
     }
 
-    private static void SerializeConstant(StringBuilder sb, ConstantDeclaration constant)
+    public static void SerializeConstant(StringBuilder sb, ConstantDeclaration constant)
     {
         // Output leading hidden tokens
         OutputLeadingHiddenTokens(sb, constant, string.Empty);
@@ -261,7 +261,7 @@ public static class FmlSerializer
         sb.AppendLine();
     }
 
-    private static void SerializeGroup(StringBuilder sb, GroupDeclaration group, int indentLevel)
+    public static void SerializeGroup(StringBuilder sb, GroupDeclaration group, int indentLevel)
     {
         var indent = GetIndent(indentLevel);
 
@@ -315,7 +315,7 @@ public static class FmlSerializer
         sb.AppendLine("}");
     }
 
-    private static void SerializeGroupParameter(StringBuilder sb, GroupParameter parameter)
+    public static void SerializeGroupParameter(StringBuilder sb, GroupParameter parameter)
     {
         // Output leading hidden tokens (comments before parameter)
         OutputLeadingHiddenTokens(sb, parameter, string.Empty);
@@ -334,7 +334,7 @@ public static class FmlSerializer
         OutputTrailingHiddenTokens(sb, parameter);
     }
 
-    private static void SerializeRule(StringBuilder sb, Rule rule, int indentLevel)
+    public static void SerializeRule(StringBuilder sb, Rule rule, int indentLevel)
     {
         var indent = GetIndent(indentLevel);
 
@@ -387,7 +387,7 @@ public static class FmlSerializer
         sb.AppendLine();
     }
 
-    private static void SerializeRuleSource(StringBuilder sb, RuleSource source)
+    public static void SerializeRuleSource(StringBuilder sb, RuleSource source)
     {
         // Output leading hidden tokens (comments before source)
         OutputLeadingHiddenTokens(sb, source, string.Empty);
@@ -464,7 +464,7 @@ public static class FmlSerializer
         OutputTrailingHiddenTokens(sb, source);
     }
 
-    private static void SerializeRuleTarget(StringBuilder sb, RuleTarget target)
+    public static void SerializeRuleTarget(StringBuilder sb, RuleTarget target)
     {
         // Output leading hidden tokens (comments before this target)
         OutputLeadingHiddenTokens(sb, target, string.Empty);
@@ -533,7 +533,7 @@ public static class FmlSerializer
         OutputTrailingHiddenTokens(sb, target);
     }
 
-    private static void SerializeTransform(StringBuilder sb, Transform transform)
+    public static void SerializeTransform(StringBuilder sb, Transform transform)
     {
         // Check if it's a simple identifier (like variable name) for copy transforms
         if (transform.Type == TransformType.Copy && transform.Parameters.Count == 1)
@@ -586,7 +586,7 @@ public static class FmlSerializer
         sb.Append(")");
     }
 
-    private static void SerializeTransformParameter(StringBuilder sb, TransformParameter parameter)
+    public static void SerializeTransformParameter(StringBuilder sb, TransformParameter parameter)
     {
         switch (parameter.Type)
         {
@@ -609,7 +609,7 @@ public static class FmlSerializer
         }
     }
 
-    private static void SerializeDependent(StringBuilder sb, RuleDependent dependent, int indentLevel)
+    public static void SerializeDependent(StringBuilder sb, RuleDependent dependent, int indentLevel)
     {
         // Output leading hidden tokens (comments before the 'then')
         OutputLeadingHiddenTokens(sb, dependent, string.Empty);
@@ -646,7 +646,7 @@ public static class FmlSerializer
         }
     }
 
-    private static void SerializeGroupInvocation(StringBuilder sb, GroupInvocation invocation)
+    public static void SerializeGroupInvocation(StringBuilder sb, GroupInvocation invocation)
     {
         // Output leading hidden tokens (comments before invocation)
         OutputLeadingHiddenTokens(sb, invocation, string.Empty);
@@ -669,7 +669,7 @@ public static class FmlSerializer
         OutputTrailingHiddenTokens(sb, invocation);
     }
 
-    private static void SerializeInvocationParameter(StringBuilder sb, InvocationParameter parameter)
+    public static void SerializeInvocationParameter(StringBuilder sb, InvocationParameter parameter)
     {
         if (parameter.Type == InvocationParameterType.Literal && parameter.Value != null)
         {
@@ -681,13 +681,13 @@ public static class FmlSerializer
         }
     }
 
-    private static void SerializeUrl(StringBuilder sb, string url)
+    public static void SerializeUrl(StringBuilder sb, string url)
     {
         // URLs are typically enclosed in double quotes in FML
         SerializeDoubleQuotedString(sb, url);
     }
 
-    private static void SerializeCode(StringBuilder sb, string code)
+    public static void SerializeCode(StringBuilder sb, string code)
     {
         // Codes can be identifiers or strings
         if (NeedsQuoting(code))
@@ -700,7 +700,7 @@ public static class FmlSerializer
         }
     }
 
-    private static void SerializeLiteral(StringBuilder sb, string value)
+    public static void SerializeLiteral(StringBuilder sb, string value)
     {
         // Determine if we should use single or double quotes
         // FML typically uses single quotes for literals
@@ -714,21 +714,21 @@ public static class FmlSerializer
         }
     }
 
-    private static void SerializeSingleQuotedString(StringBuilder sb, string value)
+    public static void SerializeSingleQuotedString(StringBuilder sb, string value)
     {
         sb.Append("'");
         sb.Append(EscapeString(value, '\''));
         sb.Append("'");
     }
 
-    private static void SerializeDoubleQuotedString(StringBuilder sb, string value)
+    public static void SerializeDoubleQuotedString(StringBuilder sb, string value)
     {
         sb.Append('"');
         sb.Append(EscapeString(value, '"'));
         sb.Append('"');
     }
 
-    private static string EscapeString(string value, char quoteChar)
+    public static string EscapeString(string value, char quoteChar)
     {
         return value
             .Replace("\\", "\\\\")
@@ -738,7 +738,7 @@ public static class FmlSerializer
             .Replace("\t", "\\t");
     }
 
-    private static bool NeedsQuoting(string value)
+    public static bool NeedsQuoting(string value)
     {
         // Simple heuristic: if it's not a valid identifier, it needs quoting
         if (string.IsNullOrEmpty(value))
@@ -754,7 +754,7 @@ public static class FmlSerializer
         return value.Any(c => !char.IsLetterOrDigit(c) && c != '_');
     }
 
-    private static string SerializeParameterMode(ParameterMode mode)
+    public static string SerializeParameterMode(ParameterMode mode)
     {
         return mode switch
         {
@@ -764,7 +764,7 @@ public static class FmlSerializer
         };
     }
 
-    private static string SerializeStructureMode(StructureMode mode)
+    public static string SerializeStructureMode(StructureMode mode)
     {
         return mode switch
         {
@@ -776,7 +776,7 @@ public static class FmlSerializer
         };
     }
 
-    private static string SerializeGroupTypeMode(GroupTypeMode mode)
+    public static string SerializeGroupTypeMode(GroupTypeMode mode)
     {
         return mode switch
         {
@@ -786,7 +786,7 @@ public static class FmlSerializer
         };
     }
 
-    private static string SerializeSourceListMode(SourceListMode mode)
+    public static string SerializeSourceListMode(SourceListMode mode)
     {
         return mode switch
         {
@@ -799,7 +799,7 @@ public static class FmlSerializer
         };
     }
 
-    private static string SerializeTargetListMode(TargetListMode mode)
+    public static string SerializeTargetListMode(TargetListMode mode)
     {
         return mode switch
         {
@@ -811,7 +811,7 @@ public static class FmlSerializer
         };
     }
 
-    private static string GetIndent(int level)
+    public static string GetIndent(int level)
     {
         return string.Concat(Enumerable.Repeat(Indent, level));
     }
@@ -819,7 +819,7 @@ public static class FmlSerializer
     /// <summary>
     /// Outputs hidden tokens if present, otherwise outputs default formatting.
     /// </summary>
-    private static void OutputLeadingHiddenTokens(StringBuilder sb, FmlNode node, string defaultOutput)
+    public static void OutputLeadingHiddenTokens(StringBuilder sb, FmlNode node, string defaultOutput)
     {
         if (node.LeadingHiddenTokens != null && node.LeadingHiddenTokens.Count > 0)
         {
@@ -839,7 +839,7 @@ public static class FmlSerializer
     /// <summary>
     /// Outputs trailing hidden tokens if present.
     /// </summary>
-    private static void OutputTrailingHiddenTokens(StringBuilder sb, FmlNode node)
+    public static void OutputTrailingHiddenTokens(StringBuilder sb, FmlNode node)
     {
         if (node.TrailingHiddenTokens != null && node.TrailingHiddenTokens.Count > 0)
         {

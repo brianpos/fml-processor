@@ -42,6 +42,10 @@ public class FmlValidator
                 _aliasedTypes.Add(use.Alias, sd);
             else if (sd != null && sd.Name != null)
                 _aliasedTypes.Add(use.Alias ?? sd.Name, sd);
+            if (sd != null)
+            { 
+                use.SetAnnotation(sd);
+            }
         }
 
         //// scan the imports
@@ -139,6 +143,7 @@ public class FmlValidator
 
             // Check that the parameter values are compatible...
 
+            // and call the extended group
         }
 
         // Now scan for dependencies in rules
@@ -178,18 +183,33 @@ public class FmlValidator
             if (group.Extends == "Resource")
             {
                 ignoreProps = "id,meta,implicitRules,language".Split(',').ToList();
-                // targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+                targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+                sourceProperties.RemoveAll(p => ignoreProps.Contains(p));
             }
             if (group.Extends == "DomainResource")
             {
                 ignoreProps = "id,meta,implicitRules,language,text,contained,extension,modifierExtension".Split(',').ToList();
-                // targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+                targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+                sourceProperties.RemoveAll(p => ignoreProps.Contains(p));
+            }
+            if (group.Extends == "BackboneElement")
+            {
+                ignoreProps = "id,extension,modifierExtension".Split(',').ToList();
+                targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+                sourceProperties.RemoveAll(p => ignoreProps.Contains(p));
+            }
+            if (group.Extends == "Element")
+            {
+                ignoreProps = "id,extension".Split(',').ToList();
+                targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+                sourceProperties.RemoveAll(p => ignoreProps.Contains(p));
             }
         }
         else
         {
             ignoreProps = "id,extension,modifierExtension".Split(',').ToList();
-            // targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+            targetProperties.RemoveAll(p => ignoreProps.Contains(p));
+            sourceProperties.RemoveAll(p => ignoreProps.Contains(p));
         }
 
         // Shuffle all the rules so that the order matches those in the source type's properties
@@ -203,7 +223,7 @@ public class FmlValidator
             {
                 var rule = oldRules[ruleIndex];
                 if (rule.Targets.Any())
-                    sourceProperties.RemoveAt(0);
+                    sourceProperties.Remove(propName);
                 oldRules.RemoveAt(ruleIndex);
                 if (!ignoreProps.Contains(propName))
                     group.Rules.Add(rule);
@@ -235,7 +255,7 @@ public class FmlValidator
                 var c = sourceProp.Child(sp).Current;
                 var targetTypes = String.Join(",", c.Current?.Type?.Select(t => t.Code));
                 comment += $"\n  //    {sp} {targetTypes}[{c.Current.Min}..{c.Current.Max}]";
-        }
+            }
             if (group.Rules.Any())
             {
                 group.Rules.Last().TrailingHiddenTokens ??= new List<HiddenToken>();
@@ -270,8 +290,6 @@ public class FmlValidator
 
     private static void VerifyFmlGroupRule(string prefix, FmlStructureMap fml, GroupDeclaration group, Dictionary<string, StructureDefinition?> _aliasedTypes, ValidateMapOptions options, List<OperationOutcome.IssueComponent> issues, Dictionary<string, PropertyOrTypeDetails?> parameterTypesByName, Rule rule)
     {
-        Console.Write(prefix);
-
         // deduce the datatypes for the variables
         Dictionary<string, PropertyOrTypeDetails?> parameterTypesByNameForRule = parameterTypesByName.ShallowCopy();
         PropertyOrTypeDetails? singleSourceVariable = null;
@@ -282,6 +300,8 @@ public class FmlValidator
             try
             {
                 sourceV = ResolveIdentifierType(sce.Source.Identifier(), parameterTypesByNameForRule, sce.Source, issues);
+                if (sourceV != null)
+                    sce.Source.SetAnnotation(sourceV);
             }
             catch (ApplicationException ex)
             {
@@ -298,6 +318,8 @@ public class FmlValidator
                     ReportIssue(issues, msg, OperationOutcome.IssueType.Value, OperationOutcome.IssueSeverity.Warning);
                 }
                 targetV = ResolveIdentifierType(sce.Target.Identifier(), parameterTypesByNameForRule, sce.Target, issues);
+                if (targetV != null)
+                    sce.Target.SetAnnotation(targetV);
             }
             catch (ApplicationException ex)
             {
@@ -306,7 +328,7 @@ public class FmlValidator
             }
 
             // If these are backbone elements, we should have a `then` rule on it
-            if (rule.Dependent == null && sourceV?.Element?.DebugString()?.Contains("BackboneElement") == true && targetV?.Element?.DebugString()?.Contains("BackboneElement") == true)
+            if (false && rule.Dependent == null && sourceV?.Element?.DebugString()?.Contains("BackboneElement") == true && targetV?.Element?.DebugString()?.Contains("BackboneElement") == true)
             {
                 // Add in the invocation
                 rule.Dependent = new RuleDependent();
@@ -344,9 +366,12 @@ public class FmlValidator
             }
             else
             {
-                Console.Write($"{sce.Source} : {sourceV?.Element?.DebugString() ?? "?"}");
+                Console.Write(prefix);
+
+                Console.Write($"{sce.Source.Element} : {sourceV?.Element?.DebugString() ?? "?"}");
                 Console.Write($"  -->  ");
-                Console.Write($"{sce.Target} : {targetV?.Element?.DebugString() ?? "?"}");
+                Console.Write($"{sce.Target.Element} : {targetV?.Element?.DebugString() ?? "?"}");
+                Console.WriteLine();
 
                 // Verify that there exists a map that goes between these types
                 VerifyMapBetweenDatatypes(options.typedGroups, issues, rule, sourceV, targetV);
@@ -381,6 +406,8 @@ public class FmlValidator
 
         if (sce == null)
         {
+            Console.Write(prefix);
+
             foreach (var source in rule.Sources)
             {
                 if (source != rule.Sources.First())
@@ -436,6 +463,8 @@ public class FmlValidator
                         tpV = new PropertyOrTypeDetails(tpV?.PropertyPath ?? string.Empty, sw.Current, options.source);
                     }
                 }
+                if (tpV != null)
+                    source.SetAnnotation(tpV);
 
                 // Cardinality constraints
                 if (source.Min.HasValue || source.Max != null)
@@ -533,6 +562,8 @@ public class FmlValidator
                         ReportIssue(issues, msg, OperationOutcome.IssueType.Exception);
                     }
                     Console.Write($" : {tpV?.Element?.DebugString() ?? "?"}");
+                    if (tpV != null)
+                        target.SetAnnotation(tpV);
                 }
                 //if (target.Invocation != null)
                 //{
@@ -559,7 +590,68 @@ public class FmlValidator
                                 string msg = $"source in copy transform `{target.Transform.Identifier()}`: cannot contain child properties @{target.Transform.Position?.StartLine}:{target.Transform.Position?.StartColumn} - consider then statement or fhirpath expression";
                                 ReportIssue(issues, msg, OperationOutcome.IssueType.Value, OperationOutcome.IssueSeverity.Warning);
                             }
-                            transformedSourceV = ResolveIdentifierType(target.Transform.Identifier()!, parameterTypesByNameForRule, target.Transform, issues);
+                            else
+                            {
+                                // this is some form of transform, so need specific code for all the transform types.
+                                switch (target.Transform.Identifier())
+                                {
+                                    case "copy":
+                                        // for a copy, the datatype will be the result of the first parameter
+                                        var typeName = target.Transform.Parameters.FirstOrDefault();
+                                        if (typeName.Type == TransformParameterType.Literal)
+                                        {
+                                            // the type is the literal type of the value itself (primitive)
+                                            string literalTypeName = typeName.Value?.GetType() switch
+                                            {
+                                                Type t when t == typeof(decimal) => "decimal",
+                                                Type t when t == typeof(int) => "integer",
+                                                Type t when t == typeof(long) => "integer64",
+                                                Type t when t == typeof(bool) => "boolean",
+                                                Type t when t == typeof(string) => "string",
+                                                Type t when t == typeof(DateTime) => "dateTime",
+                                                _ => "string"
+                                            };
+                                            transformedSourceV = ResolveDataTypeFromName(group, options.source, issues, typeName, literalTypeName);
+                                        }
+                                        break;
+
+                                    case "create":
+                                        var createTypeName = target.Transform.Parameters.FirstOrDefault();
+                                        transformedSourceV = ResolveDataTypeFromName(group, options.target, issues, createTypeName, createTypeName.Value as string);
+                                        break;
+
+                                    case "translate":
+                                        // 3 parameters to translate: source, map_uri, outp[ut type
+                                        if (target.Transform.Parameters.Count == 3)
+                                        {
+                                            string mapToType = target.Transform!.Parameters[2].Value as string;
+                                            transformedSourceV = ResolveDataTypeFromName(group, options.target, issues, target.Transform!.Parameters[2], mapToType);
+                                        }
+                                        else
+                                        {
+                                            // invalid number of parameters to the "translate" transform type
+                                            string msgTransform = $"translate does not have 3 parameters: has {target.Transform.Parameters.Count}";
+                                            ReportIssue(issues, msgTransform, OperationOutcome.IssueType.Invalid, OperationOutcome.IssueSeverity.Error);
+                                        }
+                                        break;
+
+                                    case "evaluate":
+                                        // this is a fhirpath expression, we need to return the expected type of the expression
+                                        // not sure what we should do if there can be more than 1 type here...
+                                        var expressionParameter = target.Transform.Parameters.FirstOrDefault();
+                                        Console.Error.WriteLine($"{expressionParameter.Value}");
+                                        break;
+
+                                    case "uuid":
+                                        transformedSourceV = ResolveDataTypeFromName(group, options.target, issues, target.Transform, "uuid");
+                                        break;
+
+                                    default:
+                                        string msg = $"source transform `{target.Transform.Identifier()}`: unhandled transform @{target.Transform.Position?.StartLine}:{target.Transform.Position?.StartColumn}";
+                                        ReportIssue(issues, msg, OperationOutcome.IssueType.Value, OperationOutcome.IssueSeverity.Warning);
+                                        break;
+                                }
+                            }
                         }
                         catch (ApplicationException e)
                         {
@@ -722,7 +814,8 @@ public class FmlValidator
         }
         else
         {
-            Console.WriteLine();
+            if (sce == null)
+                Console.WriteLine();
         }
     }
 
@@ -794,7 +887,7 @@ public class FmlValidator
         return result;
     }
 
-    private static void VerifyMapBetweenDatatypes(Dictionary<string, GroupDeclaration?> typedGroups, List<OperationOutcome.IssueComponent> issues, FmlNode node, PropertyOrTypeDetails? sourceV, PropertyOrTypeDetails? targetV)
+    public static void VerifyMapBetweenDatatypes(Dictionary<string, GroupDeclaration?> typedGroups, List<OperationOutcome.IssueComponent> issues, FmlNode node, PropertyOrTypeDetails? sourceV, PropertyOrTypeDetails? targetV)
     {
         if (sourceV != null && targetV != null)
         {
@@ -1173,6 +1266,8 @@ public static class FmlValidatorExtensions
                 Source = me.Sources[0],
                 Target = me.Targets[0]
             };
+            if (result.Source.Type != null)
+                return null;
             if (result.Source.Variable != null || result.Target.Variable != null)
                 return null;
             if (me.Dependent != null)

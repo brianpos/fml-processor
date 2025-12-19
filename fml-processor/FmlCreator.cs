@@ -18,9 +18,23 @@ public class FmlCreator
     public Dictionary<string, StructureDefinition> Source = new Dictionary<string, StructureDefinition>();
     public Dictionary<string, StructureDefinition> Target = new Dictionary<string, StructureDefinition>();
 
-    // ResourceType indexed
-    // public Dictionary<string, StructureDefinition> SourceResources = new Dictionary<string, StructureDefinition>();
-    // public Dictionary<string, StructureDefinition> TargetResources = new Dictionary<string, StructureDefinition>();
+    private static void AppendKnownRule(Dictionary<string, Rule> rules, string name, string ruleText, string? comment = null)
+    {
+        var rule = FmlParser.ParseRule(ruleText);
+        if (!string.IsNullOrEmpty(comment))
+            rule.SetAnnotation(new MapCommentAnnotation(comment));
+        rules.Add(name, rule);
+    }
+
+    private static Dictionary<string, Rule> CreateCustomRules()
+    {
+        var rules = new Dictionary<string, Rule>();
+        AppendKnownRule(rules, "Account.relatedAccount", "Account.relatedAccount as ra then { ra.account -> tgt.parent; ra.account -> tgt.guarantor as g, g.account = ra.account; } \"ra\";",
+            "maps to both Account.parent and Account.guarantor.account depending on the value of relatedAccount.relationship");
+        return rules;
+    }
+
+    public Dictionary<string, Rule> KnownCustomRules = CreateCustomRules();
 
     public HashSet<string> KnownMappings = [
         // R4 to R6 specific known mappings
@@ -222,7 +236,11 @@ public class FmlCreator
         "Task.reasonReference -> Task.reason",
 
         // R5 to R6 specific known mappings
+        "Account.relatedAccount.account -> Account.parent",
+        "Account.relatedAccount.account -> Account.guarantor.account",
+
         "ActorDefinition.derivedFrom -> ActorDefinition.baseDefinition",
+
 
         "AdverseEvent.occurrence -> AdverseEvent.effect",
 
@@ -256,6 +274,8 @@ public class FmlCreator
 
         "EpisodeOfCare.patient -> EpisodeOfCare.subject",
 
+        "Evidence.statistic.modelCharacteristic.attributeEstimate -> Evidence.statistic.modelCharacteristic.attribute",
+
         "ExplanationOfBenefit.patient -> ExplanationOfBenefit.subject",
 
         "MedicationAdministration.occurence -> MedicationAdministration.occurrence",
@@ -271,6 +291,8 @@ public class FmlCreator
 
         "ObservationDefinition.bodySite -> ObservationDefinition.bodyStructure",
         "ObservationDefinition.qualifiedValue.gender -> ObservationDefinition.qualifiedValue.sexParameterForClinicalUse",
+
+        // Procedure still has bodySite and bodyStructure intentionally due to cardinalities.
 
         "Subscription.filterBy.resourceType -> Subscription.filterBy.resource",
 
@@ -291,7 +313,7 @@ public class FmlCreator
             }
             else
             {
-                Console.WriteLine($"No target mapping for source type {sourceR.Key}");
+                // Console.WriteLine($"No target mapping for source type {sourceR.Key}");
             }
         }
 
@@ -309,12 +331,20 @@ public class FmlCreator
         var sourceAlias = UseScope(fml, sourceSd.Url + "|" + sourceSd.Version, StructureMode.Source);
         var targetAlies = UseScope(fml, targetSd.Url + "|" + targetSd.Version, StructureMode.Target);
 
+        var sourceWorkgroup = sourceSd.GetStringExtension("http://hl7.org/fhir/StructureDefinition/structuredefinition-wg");
+        if (!string.IsNullOrEmpty(sourceWorkgroup))
+            fml.AddAnnotation(new WorkgroupAnnotation(sourceWorkgroup));
+        var targetWorkgroup = targetSd.GetStringExtension("http://hl7.org/fhir/StructureDefinition/structuredefinition-wg");
+        if (!string.IsNullOrEmpty(targetWorkgroup))
+            fml.AddAnnotation(new WorkgroupAnnotation(targetWorkgroup));
+
         string sourceVersion = getFhirVersion(sourceSd.Version).Replace("R", "").Replace("STU", "");
         string targetVersion = getFhirVersion(targetSd.Version).Replace("R", "").Replace("STU", "");
 
         SetMetadata(fml, "url", $"http://hl7.org/fhir/uv/xver/StructureMap/{sourceSd.Name}{sourceVersion}to{targetVersion}");
         SetMetadata(fml, "name", $"{sourceSd.Name}{sourceVersion}to{targetVersion}");
         SetMetadata(fml, "title", $"{sourceSd.Name} Transforms: {getFhirVersion(sourceSd.Version)} to {getFhirVersion(targetSd.Version)}");
+        SetMetadata(fml, "status", "draft");
 
         fml.Imports ??= new List<ImportDeclaration>();
         fml.Imports.Add(new ImportDeclaration() { Url = $"http://hl7.org/fhir/uv/xver/StructureMap/*{sourceVersion}to{targetVersion}" });
@@ -362,154 +392,146 @@ public class FmlCreator
                 groupPathStack.Pop();
             }
 
-            var matchingTe = targetSd.Differential.Element.FirstOrDefault(te =>
-                    te.Path.Replace("[x]", "") == se.Path.Replace("[x]", "")
-                    || KnownMappings.Contains($"{se.Path.Replace("[x]", "")} -> {te.Path.Replace("[x]", "")}")
-                    || KnownMappings.Contains($"{te.Path.Replace("[x]", "")} -> {se.Path.Replace("[x]", "")}") // reverse mapping too (from the previous direction)
-                    );
-            if (matchingTe != null)
+            // check if there's a custom rule for this element first
+            if (KnownCustomRules.ContainsKey(currentElementPath))
             {
-                missedTargetElements.Remove(matchingTe);
-                var rule = new Rule();
-                rule.Sources.Add(new RuleSource
+                var ruleCustom = KnownCustomRules[currentElementPath];
+                groupStack.Peek().Rules.Add(ruleCustom);
+            }
+            else
+            {
+                var matchingTe = targetSd.Differential.Element.FirstOrDefault(te =>
+                        te.Path.Replace("[x]", "") == se.Path.Replace("[x]", "")
+                        || KnownMappings.Contains($"{se.Path.Replace("[x]", "")} -> {te.Path.Replace("[x]", "")}")
+                        || KnownMappings.Contains($"{te.Path.Replace("[x]", "")} -> {se.Path.Replace("[x]", "")}") // reverse mapping too (from the previous direction)
+                        );
+                if (matchingTe != null)
                 {
-                    Context = "src",
-                    Element = se.Path.Contains(".") ? se.Path.Substring(se.Path.IndexOf(".") + 1).Replace("[x]", "") : se.Path.Replace("[x]", "")
-                });
-                rule.Targets.Add(new RuleTarget
-                {
-                    Context = "tgt",
-                    Element = matchingTe.Path.Contains(".") ? matchingTe.Path.Substring(matchingTe.Path.IndexOf(".") + 1).Replace("[x]", "") : matchingTe.Path.Replace("[x]", "")
-                });
-
-                bool displayCardinality = false;
-                string? mappingWarningMessage = null;
-                if (se.Min == 0 && matchingTe.Min == 1) //  an optional field was made mandatory
-                {
-                    displayCardinality = true;
-                    mappingWarningMessage = " // Warning: source optional, target mandatory";
-                }
-                if (se.Max == "*" && matchingTe.Max == "1") // a repeating field was made single-valued
-                {
-                    displayCardinality = true;
-                    mappingWarningMessage = " // Warning: source repeating, target single-valued";
-                }
-
-                // these types need to go into their own group and invocation
-                if (se.Type.Any(t => t.Code == "BackboneElement" || t.Code == "Element"))
-                {
-                    rule.Sources[0].Variable = "s";
-                    rule.Targets[0].Variable = "t";
-                    rule.Dependent = new RuleDependent();
-                    rule.Dependent.Invocations = new List<GroupInvocation>();
-
-                    // Create a group name based on the source and target types
-                    var groupName = ConceptMapConverter.PascalCase(se.Path.Replace("[x]", "")).Replace(".", "");
-
-                    rule.Dependent.Invocations.Add(new GroupInvocation()
+                    missedTargetElements.Remove(matchingTe);
+                    var rule = new Rule();
+                    rule.Sources.Add(new RuleSource
                     {
-                        Name = groupName,
-                        Parameters = [
-                            new InvocationParameter() { Type = InvocationParameterType.Identifier, Value = "s" },
-                        new InvocationParameter() { Type = InvocationParameterType.Identifier, Value = "t" }
-                            ]
+                        Context = "src",
+                        Element = se.Path.Contains(".") ? se.Path.Substring(se.Path.LastIndexOf(".") + 1).Replace("[x]", "") : se.Path.Replace("[x]", "")
+                    });
+                    rule.Targets.Add(new RuleTarget
+                    {
+                        Context = "tgt",
+                        Element = matchingTe.Path.Contains(".") ? matchingTe.Path.Substring(matchingTe.Path.LastIndexOf(".") + 1).Replace("[x]", "") : matchingTe.Path.Replace("[x]", "")
                     });
 
-                    // Add a new group
-                    var groupBackbone = new GroupDeclaration()
+                    bool displayCardinality = false;
+                    string? mappingWarningMessage = null;
+                    if (se.Min == 0 && matchingTe.Min == 1) //  an optional field was made mandatory
                     {
-                        Name = groupName,
-                        Extends = se.Type.First().Code
-                    };
-                    groupBackbone.Parameters.Add(new GroupParameter
+                        displayCardinality = true;
+                        mappingWarningMessage = " // Warning: source optional, target mandatory";
+                    }
+                    if (se.Max == "*" && matchingTe.Max == "1") // a repeating field was made single-valued
                     {
-                        Mode = ParameterMode.Source,
-                        Name = "src"
-                    });
-                    groupBackbone.Parameters.Add(new GroupParameter
-                    {
-                        Mode = ParameterMode.Target,
-                        Name = "tgt"
-                    });
+                        displayCardinality = true;
+                        mappingWarningMessage = " // Warning: source repeating, target single-valued";
+                    }
 
-                    displayCardinality = true;
-
-                    // Add cardinality comments before pushing the new group
-                    if (displayCardinality)
+                    // these types need to go into their own group and invocation
+                    if (se.Type.Any(t => t.Code == "BackboneElement" || t.Code == "Element"))
                     {
-                        rule.Sources[0].TrailingHiddenTokens ??= new List<HiddenToken>();
-                        rule.Sources[0].TrailingHiddenTokens.Add(new HiddenToken()
+                        rule.Sources[0].Variable = "s";
+                        rule.Targets[0].Variable = "t";
+                        rule.Dependent = new RuleDependent();
+                        rule.Dependent.Invocations = new List<GroupInvocation>();
+
+                        // Create a group name based on the source and target types
+                        var groupName = ConceptMapConverter.PascalCase(se.Path.Replace("[x]", "")).Replace(".", "");
+
+                        rule.Dependent.Invocations.Add(new GroupInvocation()
                         {
-                            TokenType = FmlMappingLexer.COMMENT,
-                            Text = $" /* [{se.Min}..{se.Max}] */"
+                            Name = groupName,
+                            Parameters = [
+                                new InvocationParameter() { Type = InvocationParameterType.Identifier, Value = "s" },
+                            new InvocationParameter() { Type = InvocationParameterType.Identifier, Value = "t" }
+                                ]
                         });
-                    }
 
-                    if (displayCardinality)
-                    {
-                        rule.Targets[0].TrailingHiddenTokens ??= new List<HiddenToken>();
-                        rule.Targets[0].TrailingHiddenTokens.Add(new HiddenToken()
+                        // Add a new group
+                        var groupBackbone = new GroupDeclaration()
                         {
-                            TokenType = FmlMappingLexer.COMMENT,
-                            Text = $" /* [{matchingTe.Min}..{matchingTe.Max}] */"
-                        });
-                    }
-
-                    // Add the rule to the PARENT group before pushing the child
-                    groupStack.Peek().Rules.Add(rule);
-
-                    if (se.Path.Replace("[x]", "") != matchingTe.Path.Replace("[x]", ""))
-                    {
-                        rule.TrailingHiddenTokens ??= new List<HiddenToken>();
-                        rule.TrailingHiddenTokens.Add(new HiddenToken()
+                            Name = groupName,
+                            Extends = se.Type.First().Code
+                        };
+                        groupBackbone.Parameters.Add(new GroupParameter
                         {
-                            TokenType = FmlMappingLexer.LINE_COMMENT,
-                            Text = $" // renamed"
+                            Mode = ParameterMode.Source,
+                            Name = "src"
                         });
-                    }
-
-                    groupStack.Push(groupBackbone);
-                    groupPathStack.Push(currentElementPath); // Push the full path of this BackboneElement
-                    fml.Groups.Add(groupBackbone);
-                }
-                else
-                {
-                    // Check the types for missmatching types to include messages there too
-                    string sourceTypes = String.Join(",", se.Type?.Select(t => t.Code));
-                    string sourceTargetProfiles = String.Join(",", se.Type?.SelectMany(t => t.TargetProfile.Select(t => t.Replace("http://hl7.org/fhir/StructureDefinition/", ""))) ?? Enumerable.Empty<string>());
-                    string targetTypes = String.Join(",", matchingTe.Type?.Select(t => t.Code));
-                    string targetTargetProfiles = String.Join(",", matchingTe.Type?.SelectMany(t => t.TargetProfile.Select(t => t.Replace("http://hl7.org/fhir/StructureDefinition/", ""))) ?? Enumerable.Empty<string>());
-                    if (!AreTypesCompatible(sourceTypes, targetTypes))
-                    {
-                        mappingWarningMessage = (mappingWarningMessage != null ? mappingWarningMessage + "    " : " // Warning: ") + $"Source Type unsupported: {InCompatibleTypes(sourceTypes, targetTypes)}  ({sourceTypes} -> {targetTypes})";
-                    }
-                    if (!AreTypesCompatible(sourceTargetProfiles, targetTargetProfiles))
-                    {
-                        mappingWarningMessage = (mappingWarningMessage != null ? mappingWarningMessage + "    " : " // Warning: ") + $"Source TargetProfile unsupported: {InCompatibleTypes(sourceTargetProfiles, targetTargetProfiles)}";
-                    }
-
-                    // Not a BackboneElement - just add cardinality comments and add rule normally
-                    if (displayCardinality)
-                    {
-                        rule.Sources[0].TrailingHiddenTokens ??= new List<HiddenToken>();
-                        rule.Sources[0].TrailingHiddenTokens.Add(new HiddenToken()
+                        groupBackbone.Parameters.Add(new GroupParameter
                         {
-                            TokenType = FmlMappingLexer.COMMENT,
-                            Text = $" /* [{se.Min}..{se.Max}] */"
+                            Mode = ParameterMode.Target,
+                            Name = "tgt"
                         });
-                    }
 
-                    if (displayCardinality)
-                    {
-                        rule.Targets[0].TrailingHiddenTokens ??= new List<HiddenToken>();
-                        rule.Targets[0].TrailingHiddenTokens.Add(new HiddenToken()
+                        // always display cardinality for groups
+                        displayCardinality = true;
+
+                        // Add the rule to the PARENT group before pushing the child
+                        groupStack.Peek().Rules.Add(rule);
+
+                        if (se.Path.Replace("[x]", "") != matchingTe.Path.Replace("[x]", ""))
                         {
-                            TokenType = FmlMappingLexer.COMMENT,
-                            Text = $" /* [{matchingTe.Min}..{matchingTe.Max}] */"
-                        });
-                    }
+                            rule.TrailingHiddenTokens ??= new List<HiddenToken>();
+                            rule.TrailingHiddenTokens.Add(new HiddenToken()
+                            {
+                                TokenType = FmlMappingLexer.LINE_COMMENT,
+                                Text = " // renamed"
+                            });
+                            rule.SetAnnotation(new ElementRenamedAnnotation());
+                            rule.Sources[0].SetAnnotation(new ElementDefAnnotation(se));
+                            rule.Targets[0].SetAnnotation(new ElementDefAnnotation(matchingTe));
 
-                    groupStack.Peek().Rules.Add(rule);
+                            fml.SetAnnotation(new NeedsReviewAnnotation());
+                            groupStack.Peek().SetAnnotation(new NeedsReviewAnnotation());
+                            rule.SetAnnotation(new NeedsReviewAnnotation());
+                        }
+
+                        groupStack.Push(groupBackbone);
+                        groupPathStack.Push(currentElementPath); // Push the full path of this BackboneElement
+                        fml.Groups.Add(groupBackbone);
+                    }
+                    else
+                    {
+                        // Check the types for missmatching types to include messages there too
+                        string sourceTypes = String.Join(",", se.Type?.Select(t => t.Code));
+                        string sourceTargetProfiles = String.Join(",", se.Type?.SelectMany(t => t.TargetProfile.Select(t => t.Replace("http://hl7.org/fhir/StructureDefinition/", ""))) ?? Enumerable.Empty<string>());
+                        string targetTypes = String.Join(",", matchingTe.Type?.Select(t => t.Code));
+                        string targetTargetProfiles = String.Join(",", matchingTe.Type?.SelectMany(t => t.TargetProfile.Select(t => t.Replace("http://hl7.org/fhir/StructureDefinition/", "")))?.Where(t => !string.IsNullOrEmpty(t)) ?? Enumerable.Empty<string>());
+                        if (!AreTypesCompatible(sourceTypes, targetTypes))
+                        {
+                            mappingWarningMessage = (mappingWarningMessage != null ? mappingWarningMessage + "    " : " // Warning: ") + $"Source Type unsupported: {InCompatibleTypes(sourceTypes, targetTypes)}  ({sourceTypes} -> {targetTypes})";
+                        }
+                        if (!AreTypesCompatible(sourceTargetProfiles, targetTargetProfiles) && targetTargetProfiles.Any()) // no target profile means ANY
+                        {
+                            mappingWarningMessage = (mappingWarningMessage != null ? mappingWarningMessage + "    " : " // Warning: ") + $"Source TargetProfile unsupported: {InCompatibleTypes(sourceTargetProfiles, targetTargetProfiles)}  ({sourceTargetProfiles} -> {targetTargetProfiles})";
+                        }
+
+                        groupStack.Peek().Rules.Add(rule);
+
+                        if (se.Path.Replace("[x]", "") != matchingTe.Path.Replace("[x]", ""))
+                        {
+                            rule.TrailingHiddenTokens ??= new List<HiddenToken>();
+                            rule.TrailingHiddenTokens.Add(new HiddenToken()
+                            {
+                                TokenType = FmlMappingLexer.LINE_COMMENT,
+                                Text = " // renamed"
+                            });
+                            rule.SetAnnotation(new ElementRenamedAnnotation());
+                            rule.Sources[0].SetAnnotation(new ElementDefAnnotation(se));
+                            rule.Targets[0].SetAnnotation(new ElementDefAnnotation(matchingTe));
+
+                            fml.SetAnnotation(new NeedsReviewAnnotation());
+                            groupStack.Peek().SetAnnotation(new NeedsReviewAnnotation());
+                            rule.SetAnnotation(new NeedsReviewAnnotation());
+                        }
+                    }
 
                     if (mappingWarningMessage != null)
                     {
@@ -519,65 +541,86 @@ public class FmlCreator
                             TokenType = FmlMappingLexer.LINE_COMMENT,
                             Text = mappingWarningMessage
                         });
+                        fml.SetAnnotation(new NeedsReviewAnnotation());
+                        groupStack.Peek().SetAnnotation(new NeedsReviewAnnotation());
+                        rule.SetAnnotation(new NeedsReviewAnnotation());
                     }
-                    if (se.Path.Replace("[x]", "") != matchingTe.Path.Replace("[x]", ""))
+
+                    if (displayCardinality)
                     {
-                        rule.TrailingHiddenTokens ??= new List<HiddenToken>();
-                        rule.TrailingHiddenTokens.Add(new HiddenToken()
+                        rule.Sources[0].TrailingHiddenTokens ??= new List<HiddenToken>();
+                        rule.Sources[0].TrailingHiddenTokens.Add(new HiddenToken()
                         {
-                            TokenType = FmlMappingLexer.LINE_COMMENT,
-                            Text = $" // renamed"
+                            TokenType = FmlMappingLexer.COMMENT,
+                            Text = $" /* [{se.Min}..{se.Max}] */"
+                        });
+
+                        rule.Targets[0].TrailingHiddenTokens ??= new List<HiddenToken>();
+                        rule.Targets[0].TrailingHiddenTokens.Add(new HiddenToken()
+                        {
+                            TokenType = FmlMappingLexer.COMMENT,
+                            Text = $" /* [{matchingTe.Min}..{matchingTe.Max}] */"
                         });
                     }
                 }
-            }
-            else
-            {
-                missedSourceElements.Add(se);
+                else
+                {
+                    missedSourceElements.Add(se);
+                }
             }
         }
 
         if (missedSourceElements.Any())
         {
-            string comment = "\n\n  // The following source properties were not read:";
+            string comment = "/* The following source properties were not read:\n";
             foreach (var element in missedSourceElements)
             {
                 var targetTypes = String.Join(",", element.Type?.Select(t => t.Code));
-                comment += $"\n  //    {element.Path} {targetTypes}[{element.Min}..{element.Max}]";
+                comment += $"    {element.Path} {targetTypes}[{element.Min}..{element.Max}]";
                 IEnumerable<string> targetProfiles = element.Type?.SelectMany(t => t.TargetProfile.Select(tp => tp.Replace("http://hl7.org/fhir/StructureDefinition/", ""))) ?? Enumerable.Empty<string>();
                 if (targetProfiles.Any())
                     comment += $" ({String.Join(",", targetProfiles)})";
+                comment += "\n";
+                fml.AddAnnotation(new NotReadElementAnnotation(element));
             }
+            comment += "*/\n";
             if (group.Rules.Any())
             {
-                group.Rules.Last().TrailingHiddenTokens ??= new List<HiddenToken>();
-                group.Rules.Last().TrailingHiddenTokens.Add(new HiddenToken()
+                group.LeadingHiddenTokens ??= new List<HiddenToken>();
+                group.LeadingHiddenTokens.Add(new HiddenToken()
                 {
                     TokenType = FmlMappingLexer.LINE_COMMENT,
                     Text = comment
                 });
             }
+            fml.SetAnnotation(new NeedsReviewAnnotation());
         }
         if (missedTargetElements.Any())
         {
-            string comment = "\n\n  // The following target properties were not populated:";
+            string comment = "/* The following target properties were not populated:\n";
             foreach (var element in missedTargetElements)
             {
                 var targetTypes = String.Join(",", element.Type?.Select(t => t.Code));
-                comment += $"\n  //    {element.Path} {targetTypes}[{element.Min}..{element.Max}]";
+                comment += $"    {element.Path} {targetTypes}[{element.Min}..{element.Max}]";
                 IEnumerable<string> targetProfiles = element.Type?.SelectMany(t => t.TargetProfile.Select(tp => tp.Replace("http://hl7.org/fhir/StructureDefinition/", ""))) ?? Enumerable.Empty<string>();
                 if (targetProfiles.Any())
                     comment += $" ({String.Join(",", targetProfiles)})";
+                comment += "\n";
+                fml.AddAnnotation(new NotPopulatedElementAnnotation(element));
             }
+            comment += "*/\n";
             if (group.Rules.Any())
             {
-                group.Rules.Last().TrailingHiddenTokens ??= new List<HiddenToken>();
-                group.Rules.Last().TrailingHiddenTokens.Add(new HiddenToken()
+                group.LeadingHiddenTokens ??= new List<HiddenToken>();
+                group.LeadingHiddenTokens.Add(new HiddenToken()
                 {
                     TokenType = FmlMappingLexer.LINE_COMMENT,
                     Text = comment
                 });
             }
+            // don't need to review props missed, if there are none to put somewhere (for now)
+            // as these are likely legitimately new properties
+            fml.SetAnnotation(new NeedsReviewAnnotation()); 
         }
 
         return fml;
@@ -608,8 +651,8 @@ public class FmlCreator
 
     private bool AreTypesCompatible(string sourceTypes, string targetTypes)
     {
-        var sourceTypeList = sourceTypes.Split(',').Select(t => t.Trim()).ToHashSet();
-        var targetTypeList = targetTypes.Split(',').Select(t => t.Trim()).ToHashSet();
+        var sourceTypeList = sourceTypes.Split(',').Select(t => t.Trim()).Where(t => !String.IsNullOrEmpty(t)).ToHashSet();
+        var targetTypeList = targetTypes.Split(',').Select(t => t.Trim()).Where(t => !String.IsNullOrEmpty(t)).ToHashSet();
 
         // ensure that all source types are in target types
         // (the target having more types available is fine, just not the other way around)
@@ -633,8 +676,8 @@ public class FmlCreator
 
     private string InCompatibleTypes(string sourceTypes, string targetTypes)
     {
-        var sourceTypeList = sourceTypes.Split(',').Select(t => t.Trim()).ToHashSet();
-        var targetTypeList = targetTypes.Split(',').Select(t => t.Trim()).ToHashSet();
+        var sourceTypeList = sourceTypes.Split(',').Select(t => t.Trim()).Where(t => !String.IsNullOrEmpty(t)).ToHashSet();
+        var targetTypeList = targetTypes.Split(',').Select(t => t.Trim()).Where(t => !String.IsNullOrEmpty(t)).ToHashSet();
 
         // remove any compatible pairs from the source/target lists
         foreach (var pair in compatiblePairs)
@@ -676,101 +719,6 @@ public class FmlCreator
         });
         return resourceType + fhirVersion;
     }
-
-    // Convert the ConceptMap (which has different groups for each resource/backbone type)
-    //public FmlStructureMap ConvertToFml(ConceptMap conceptMap)
-    //{
-    //    // create a new FmlStructureMap
-    //    // and create a new group in each group of the ConceptMap
-    //    // metadata can be populated with ConceptMap metadata if needed
-    //    // (This isn't going into the Fml ConceptMap structure, as these are conceptual mappings that
-    //    // are being converted into actual executable structure mappings)
-
-    //    var structureMap = new FmlStructureMap();
-    //    structureMap.Structures = new();
-    //    var sourceAlias = UseScope(structureMap, conceptMap.SourceScope, StructureMode.Source);
-    //    var targetAlies = UseScope(structureMap, conceptMap.TargetScope, StructureMode.Target);
-
-    //    // Populate metadata from ConceptMap if available
-    //    if (!string.IsNullOrEmpty(conceptMap.Url))
-    //    {
-    //        SetMetadata(structureMap, "url", conceptMap.Url.Replace("ConceptMap", "StructureMap"));
-    //    }
-
-    //    if (!string.IsNullOrEmpty(conceptMap.Name))
-    //    {
-    //        SetMetadata(structureMap, "name", conceptMap.Name);
-    //    }
-
-    //    if (!string.IsNullOrEmpty(conceptMap.Title))
-    //    {
-    //        SetMetadata(structureMap, "title", conceptMap.Title);
-    //    }
-
-    //    if (!string.IsNullOrEmpty(conceptMap.Version))
-    //    {
-    //        SetMetadata(structureMap, "version", conceptMap.Version);
-    //    }
-
-    //    if (conceptMap.Status.HasValue)
-    //    {
-    //        SetMetadata(structureMap, "status", conceptMap.Status.Value.ToString().ToLowerInvariant());
-    //    }
-    //    else
-    //    {
-    //        // default the status to draft
-    //        SetMetadata(structureMap, "status", "draft");
-    //    }
-
-    //    // Create map declaration if URL exists
-    //    //if (!string.IsNullOrEmpty(conceptMap.Url))
-    //    //{
-    //    //    var identifier = conceptMap.Name ?? "ConceptMapToStructureMap";
-    //    //    structureMap.MapDeclaration = new MapDeclaration
-    //    //    {
-    //    //        Url = conceptMap.Url.Replace("ConceptMap", "StructureMap"),
-    //    //        Identifier = identifier
-    //    //    };
-    //    //}
-
-    //    // Convert each ConceptMap group into a StructureMap group
-    //    foreach (var group in conceptMap.Group)
-    //    {
-    //        var fmlGroup = ConvertGroupToFml(group);
-    //        if (fmlGroup != null)
-    //        {
-    //            structureMap.Groups.Add(fmlGroup);
-    //            // fmlGroup.TypeMode = GroupTypeMode.TypePlus;
-    //            fmlGroup.Extends = "BackboneElement";
-    //        }
-    //    }
-
-    //    // patch the first group's source/target to use the overall source/target scope aliases
-    //    if (structureMap.Groups.Count > 0)
-    //    {
-    //        var firstGroup = structureMap.Groups[0];
-    //        firstGroup.TypeMode = GroupTypeMode.TypePlus;
-    //        firstGroup.Extends = "Resource";
-    //        if (sourceAlias != null && firstGroup.Parameters.Count > 0)
-    //        {
-    //            firstGroup.Parameters[0].Type = sourceAlias;
-    //        }
-    //        if (targetAlies != null && firstGroup.Parameters.Count > 1)
-    //        {
-    //            firstGroup.Parameters[1].Type = targetAlies;
-    //        }
-    //        string sourceVersion = structureMap.Structures[0].Alias.Replace(firstGroup.Name, "").Replace("R", "");
-    //        string targetVersion = structureMap.Structures[1].Alias.Replace(firstGroup.Name, "").Replace("R", "");
-    //        SetMetadata(structureMap, "url", $"http://hl7.org/fhir/uv/xver/StructureMap/{firstGroup.Name}{sourceVersion}to{targetVersion}");
-    //        SetMetadata(structureMap, "name", $"{firstGroup.Name}{sourceVersion}to{targetVersion}");
-    //        SetMetadata(structureMap, "title", $"{firstGroup.Name} Transforms: {structureMap.Structures[0].Alias.Replace(firstGroup.Name, "")} to {structureMap.Structures[1].Alias.Replace(firstGroup.Name, "")}");
-
-    //        structureMap.Imports ??= new List<ImportDeclaration>();
-    //        structureMap.Imports.Add(new ImportDeclaration() { Url = $"http://hl7.org/fhir/uv/xver/StructureMap/*{sourceVersion}to{targetVersion}" });
-    //    }
-
-    //    return structureMap;
-    //}
 
     public static string PascalCase(string input)
     {

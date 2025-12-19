@@ -1,6 +1,9 @@
 using Antlr4.Runtime;
+using Antlr4.Runtime.Tree;
 using fml_processor.Models;
 using fml_processor.Visitors;
+using Hl7.Fhir.Support;
+using static fml_processor.Models.ParseResult;
 
 namespace fml_processor;
 
@@ -164,6 +167,109 @@ public static class FmlParser
                 failure.Errors),
             _ => throw new InvalidOperationException("Unexpected parse result type")
         };
+    }
+
+    public static Rule ParseRule(string ruleText)
+    {
+        return Parse<Rule>(ruleText, (parser) => parser.mapRule());
+    }
+
+    public static T Parse<T>(string fshText, Func<FmlMappingParser, IParseTree> parseNode)
+        where T : FmlNode
+    {
+        if (string.IsNullOrEmpty(fshText))
+        {
+            var issues = new List<ParseError>
+            {
+                new ParseError
+                {
+                    Severity = ErrorSeverity.Error,
+                    Code = "empty-input",
+                    Message = "Input FSH text is null or empty",
+                    Location = "@0:0",
+                    Line = 0,
+                    Column = 0
+                }
+            };
+            throw new FmlParseException(
+                "Failed to parse FML text",
+                issues);
+        }
+
+        try
+        {
+            // Create ANTLR input stream
+            var inputStream = new AntlrInputStream(fshText);
+
+            // Create lexer
+            var lexer = new FmlMappingLexer(inputStream);
+
+            // Create token stream
+            var tokenStream = new CommonTokenStream(lexer);
+
+            // Create parser
+            var parser = new FmlMappingParser(tokenStream);
+
+            // Add custom error listener
+            var errorListener = new FmlParserErrorListener();
+            parser.RemoveErrorListeners(); // Remove default console error listener
+            parser.AddErrorListener(errorListener);
+
+            // Parse the document
+            var tree = parseNode(parser);
+
+            // Check for parsing errors
+            var errors = errorListener.GetErrors();
+            if (errors.Count > 0)
+            {
+                throw new FmlParseException(
+                    "Failed to parse FML text",
+                    errors);
+            }
+
+            // Build the object model using the visitor
+            var visitor = new FmlMappingModelVisitor(tokenStream);
+            var document = visitor.Visit(tree) as T;
+
+            if (document == null)
+            {
+                var issues = new List<ParseError>
+                {
+                    new ParseError
+                    {
+                        Severity = ErrorSeverity.Error,
+                        Code = "visitor-error",
+                        Message = "Failed to build FSH document from parse tree",
+                        Location = "@0:0",
+                        Line = 0,
+                        Column = 0
+                    }
+                };
+                throw new FmlParseException(
+                    "Failed to parse FML text",
+                    issues);
+            }
+
+            return document;
+        }
+        catch (Exception ex)
+        {
+            var issues = new List<ParseError>
+            {
+                new ParseError
+                {
+                    Severity = ErrorSeverity.Error,
+                    Code = "exception",
+                    Message = ex.Message,
+                    Location = "@0:0",
+                    Line = 0,
+                    Column = 0
+                }
+            };
+            throw new FmlParseException(
+                "Failed to parse FML text",
+                issues);
+        }
     }
 }
 

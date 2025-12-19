@@ -25,23 +25,8 @@ namespace fml_tester
             {
                 client.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("fml-generator", "0.10.0"));
 
-                // Load the type profiles
-                string typesUrl = sourceBaseUrl + "profiles-types.json";
-                string typesFile = Path.Combine(targetFolder, "profiles-types.json");
-                if (!File.Exists(typesFile))
-                {
-                    var typesData = await client.GetByteArrayAsync(typesUrl);
-                    await File.WriteAllBytesAsync(typesFile, typesData);
-                }
-
-                // Load the resource profiles
-                string resourcesFile = Path.Combine(targetFolder, "profiles-resources.json");
-                string resourcesUrl = sourceBaseUrl + "profiles-resources.json";
-                if (!File.Exists(resourcesFile))
-                {
-                    var resourcesData = await client.GetByteArrayAsync(resourcesUrl);
-                    await File.WriteAllBytesAsync(resourcesFile, resourcesData);
-                }
+                await DownloadFile(sourceBaseUrl, targetFolder, client, "profiles-types.json");
+                await DownloadFile(sourceBaseUrl, targetFolder, client, "profiles-resources.json");
 
                 // Load the examples ZIP
                 string examplesFile = Path.Combine(targetFolder, "examples-json.zip");
@@ -53,6 +38,24 @@ namespace fml_tester
                     await stream.CopyToAsync(outStream);
                     await outStream.FlushAsync();
                 }
+
+                // the files for kindling
+                //await DownloadFile(sourceBaseUrl, targetFolder, client, "profiles-types.xml");
+                //await DownloadFile(sourceBaseUrl, targetFolder, client, "profiles-resources.xml");
+                //await DownloadFile(sourceBaseUrl, targetFolder, client, "profiles-others.xml");
+                //await DownloadFile(sourceBaseUrl, targetFolder, client, "expansions.xml");
+                //await DownloadFile(sourceBaseUrl, targetFolder, client, "valuesets.xml");
+            }
+        }
+
+        private static async Task DownloadFile(string sourceBaseUrl, string targetFolder, HttpClient client, string fn)
+        {
+            string filename = Path.Combine(targetFolder, fn);
+            string url = sourceBaseUrl + fn;
+            if (!File.Exists(filename))
+            {
+                var othersData = await client.GetByteArrayAsync(url);
+                await File.WriteAllBytesAsync(filename, othersData);
             }
         }
 
@@ -60,6 +63,12 @@ namespace fml_tester
         public async Task DownloadR4StructureDefinitions()
         {
             await DownloadStructureDefinitionsAndExamples("https://hl7.org/fhir/R4/", "R4");
+        }
+
+        [TestMethod]
+        public async Task DownloadR4BStructureDefinitions()
+        {
+            await DownloadStructureDefinitionsAndExamples("https://hl7.org/fhir/R4B/", "R4B");
         }
 
         [TestMethod]
