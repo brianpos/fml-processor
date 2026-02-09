@@ -60,6 +60,12 @@ namespace fml_tester
         }
 
         [TestMethod]
+        public async Task DownloadR3StructureDefinitions()
+        {
+            await DownloadStructureDefinitionsAndExamples("https://hl7.org/fhir/STU3/", "R3");
+        }
+
+        [TestMethod]
         public async Task DownloadR4StructureDefinitions()
         {
             await DownloadStructureDefinitionsAndExamples("https://hl7.org/fhir/R4/", "R4");

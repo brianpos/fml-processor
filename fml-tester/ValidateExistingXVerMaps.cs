@@ -6,8 +6,6 @@ using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Utility;
 using Microsoft.Health.Fhir.CodeGen.Tests;
 using Microsoft.Health.Fhir.MappingLanguage;
-using System.Reflection.Metadata.Ecma335;
-using System.Xml;
 using Task = System.Threading.Tasks.Task;
 
 namespace fml_tester
@@ -178,7 +176,36 @@ namespace fml_tester
             js.TryDeserializeResource(jsonResources, out Resource? bundleResources, out issues);
 
             var imr = new InMemoryResourceResolver();
-            var types = (bundleTypes as Bundle).Entry.Select(e => e.Resource).OfType<StructureDefinition>();
+            var types = (bundleTypes as Bundle).Entry.Select(e => e.Resource).OfType<StructureDefinition>().Select(e => {
+                if (fhirVersion == "R3")
+                {
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/boolean", "boolean.value", "boolean", "http://hl7.org/fhirpath/System.Boolean");
+
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/string", "string.value", "string", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/uri", "uri.value", "uri", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/code", "code.value", "code", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/oid", "oid.value", "oid", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/id", "id.value", "id", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/uuid", "uuid.value", "uuid", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/markdown", "markdown.value", "markdown", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/base64Binary", "base64Binary.value", "base64Binary", "http://hl7.org/fhirpath/System.String");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/xhtml", "xhtml.value", "xhtml", "http://hl7.org/fhirpath/System.String");
+
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/integer", "integer.value", "integer", "http://hl7.org/fhirpath/System.Integer");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/unsignedInt", "unsignedInt.value", "unsignedInt", "http://hl7.org/fhirpath/System.Integer");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/positiveInt", "positiveInt.value", "positiveInt", "http://hl7.org/fhirpath/System.Integer");
+
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/decimal", "decimal.value", "decimal", "http://hl7.org/fhirpath/System.Decimal");
+
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/date", "date.value", "date", "http://hl7.org/fhirpath/System.Date");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/dateTime", "dateTime.value", "dateTime", "http://hl7.org/fhirpath/System.DateTime");
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/instant", "instant.value", "instant", "http://hl7.org/fhirpath/System.DateTime");
+
+                    PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/time", "time.value", "time", "http://hl7.org/fhirpath/System.Time");
+
+                }
+                return e;
+            });
             imr.Add(types);
             var resources = (bundleResources as Bundle).Entry.Select(e => e.Resource).OfType<StructureDefinition>();
             imr.Add(resources);
@@ -187,6 +214,7 @@ namespace fml_tester
             //ds.Refresh(true);
             string numVersion = fhirVersion switch
             {
+                "R3" => "3.0",
                 "R4" => "4.0",
                 "R4B" => "4.3",
                 "R5" => "5.0",
@@ -197,6 +225,43 @@ namespace fml_tester
             return resolver;
         }
 
+        private static void PatchPrimitiveTypes(StructureDefinition sd, string patchCanonical, string patchPath, string patchFhirType, string patchFhirPathType)
+        {
+            if (sd.Url == patchCanonical)
+            {
+                // patch the datatype in 
+                // patch the differential
+                var valueNode = sd.Differential.Element.FirstOrDefault(e => e.Path == patchPath);
+                if (valueNode != null)
+                {
+                    if (valueNode.Type.Count == 0)
+                    {
+                        valueNode.Type.Add(new ElementDefinition.TypeRefComponent() { Code = patchFhirPathType });
+                        valueNode.Type[0].SetStringExtension("http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type", patchFhirType);
+                    }
+                    if (String.IsNullOrEmpty(valueNode.Type[0].Code))
+                    {
+                        valueNode.Type[0].Code = patchFhirPathType;
+                        valueNode.Type[0].SetStringExtension("http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type", patchFhirType);
+                    }
+                }
+                // also patch the snapshot
+                valueNode = sd.Snapshot.Element.FirstOrDefault(e => e.Path == patchPath);
+                if (valueNode != null)
+                {
+                    if (valueNode.Type.Count == 0)
+                    {
+                        valueNode.Type.Add(new ElementDefinition.TypeRefComponent() { Code = patchFhirPathType });
+                        valueNode.Type[0].SetStringExtension("http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type", patchFhirType);
+                    }
+                    if (String.IsNullOrEmpty(valueNode.Type[0].Code))
+                    {
+                        valueNode.Type[0].Code = patchFhirPathType;
+                        valueNode.Type[0].SetStringExtension("http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type", patchFhirType);
+                    }
+                }
+            }
+        }
 
         public void DetectMissingProps(ValidateMapOptions options, FmlStructureMap fml)
         {

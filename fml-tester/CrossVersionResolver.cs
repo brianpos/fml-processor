@@ -108,7 +108,7 @@ internal class VersionFilterResolver : IAsyncResourceResolver
         return result;
     }
 
-	private const string fhirBaseCanonical = "http://hl7.org/fhir/";
+    private const string fhirBaseCanonical = "http://hl7.org/fhir/";
 
 	public static string ConvertCanonical(string uri)
 	{
