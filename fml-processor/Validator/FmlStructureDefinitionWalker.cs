@@ -193,7 +193,7 @@ namespace Microsoft.Health.Fhir.MappingLanguage
             {
                 return Current.Current.Type
                     .GroupBy(t => t.GetTypeProfile(), t => t.TargetProfile)
-                    .Select(group => FromCanonical(group.Key!, group.SelectMany(g => g))); // no use returning multiple "reference" profiles when they only differ in targetReference
+                    .Select(group => FromCanonical(group.Key.Replace("http://hl7.org/fhir/StructureDefinition/http://hl7.org/fhirpath/", "http://hl7.org/fhirpath/")!, group.SelectMany(g => g))); // no use returning multiple "reference" profiles when they only differ in targetReference
             }
 
             throw new Hl7.Fhir.Specification.StructureDefinitionWalkerException("Invalid StructureDefinition: element misses either a type reference or " +
