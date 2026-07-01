@@ -148,28 +148,98 @@ of the source‑generator approach. If compile‑time guarantees later become im
 Option B can be layered on without throwing away the mapping logic — factor the
 "C# member → ElementDefinition" projection into a library both front‑ends can call.
 
-## 6. Getting descriptions (documentation) out of the code
+## 6. Reusing the Firely SDK's existing attributes
 
-Because the whole point is *documentation from code*, element descriptions matter.
-Options, best first:
+Because this repo already references the Firely .NET SDK, we do **not** need to invent
+a bespoke attribute vocabulary for the *structural* side of the model. The following
+attributes are verified against `Hl7.Fhir.Base` 5.12.1 (the version referenced here)
+by reflecting over the shipped assembly, and they map directly onto
+`StructureDefinition`/`ElementDefinition`:
 
-1. **XML doc comments** (`/// <summary>…`). Enable `<GenerateDocumentationFile>true`,
-   ship the `.xml` next to the DLL, and parse it (member names use the
-   `P:Namespace.Type.Property` format). Best authoring experience for developers.
-2. **Attributes** — `[Description("…")]`, `[Display(Name=…, Description=…)]`, or a
-   project‑specific `[LogicalElement(Short=…, Definition=…)]`. Explicit but noisier.
-3. **Both**: attribute wins if present, else fall back to the doc comment.
+| Firely attribute (namespace) | Target | Key members | Maps to |
+| --- | --- | --- | --- |
+| `[FhirType(name, canonical)]` (`Introspection`) | Class | `Name`, `Canonical`, `IsResource`, `IsNestedType` | `StructureDefinition.name` / `.url` / `.type`; root element — this **is** the "driver + canonical" attribute |
+| `[FhirElement(name)]` (`Introspection`) | Property | `Name`, `Order`, `Choice`, `XmlSerialization`, `InSummary`, `IsModifier`, `IsPrimitiveValue`, `FiveWs` | element `path`, `.order`, `representation` (xmlAttr), `.isModifier`, `.isSummary` |
+| `[Cardinality(Min=…, Max=…)]` (`Validation`) | Property | `Min`, `Max` (`-1` = `*`) | `ElementDefinition.min` / `.max` — **authoritative cardinality**, better than guessing |
+| `[AllowedTypes(types)]` (`Validation`) | Property | `Type[] Types` | `type[]` for choice (`value[x]`) elements |
+| `[Binding(name)]` + `[Bindable(true)]` (`Introspection`) | Property/Class | `Name`, `IsBindable` | `ElementDefinition.binding` |
+| `[References(resources)]` (`Introspection`) | Property | `string[] Resources` | `type.targetProfile` |
+| `[DeclaredType(Type=…)]` (`Introspection`) | Property | `Type` | overrides the CLR→FHIR type mapping |
+| `[BackboneType(definitionPath)]` (`Introspection`) | Class | `DefinitionPath` | nested `BackboneElement` typing |
+| `[NotMapped]` (`Introspection`) | Any | — | **the "ignore this member" marker** — reuse instead of a custom `[LogicalIgnore]` |
+| `[FhirModelAssembly(since)]` (`Introspection`) | Assembly | `FhirRelease Since` | marks an assembly as a FHIR model provider (discovery) |
+| `[Versioned]` / `[VersionedValidation]` (`Introspection`/`Validation`) | Any | `FhirRelease Since` | version‑gating elements |
+| `[UriPattern]` (`Validation`) | Property | — | uri‑format validation hint |
 
-## 7. The "driver" artifact — deciding which classes are output
+Two consequences:
+
+- The doc's earlier hypothetical `[LogicalModel(Canonical=…)]` is essentially
+  **`[FhirType(name, canonical)]`**, and `[LogicalIgnore]` is **`[NotMapped]`** — so we
+  reuse these rather than defining new ones.
+- The SDK's own **`ModelInspector` / `ClassMapping` / `PropertyMapping`** already *read
+  all of these attributes for you*, producing a pre‑parsed, FHIR‑shaped view of a type.
+  The generator can consume that instead of hand‑rolling `GetCustomAttribute` calls.
+
+**The one thing these attributes deliberately do *not* carry is human documentation
+prose** — there is no Firely attribute for `short`/`definition`/`comment` text. That
+gap is exactly what XML doc comments fill (§7). So the division of labour is:
+
+- **Firely attributes → the machine‑facing schema** (cardinality, type, order, binding,
+  canonical, isModifier).
+- **XML `///` doc comments → the human‑facing documentation** (`short`, `definition`,
+  `comment`).
+
+No overlap, no duplicated text.
+
+## 7. Getting descriptions (documentation) out of the code — XML doc comments
+
+Because the whole point is *documentation from code*, and the Firely attributes carry
+no prose, **XML doc comments are the chosen documentation channel.**
+
+**Plumbing.** Doc comments are **not** in the compiled DLL. Enable
+`<GenerateDocumentationFile>true</GenerateDocumentationFile>` on the target project; the
+compiler emits a sibling `MyAssembly.xml`. The reflection engine loads the DLL for
+structure and reads the `.xml` for prose, keyed by *documentation IDs*:
+
+- Type → `T:Namespace.MyClass`
+- Property → `P:Namespace.MyClass.MyProperty` (generics use backtick arity, e.g. `` `1 ``)
+
+**Tag → field mapping:**
+
+| XML doc tag | Target |
+| --- | --- |
+| `<summary>` on a property | `ElementDefinition.short` (and/or `.definition`) |
+| `<remarks>` on a property | `ElementDefinition.definition` or `.comment` (longer prose) |
+| `<summary>` on the class | `StructureDefinition.description` + root element `.definition` |
+| `<value>` | property `short` (alternative to `<summary>`) |
+| `<see cref="…"/>` | resolve the cref doc‑ID → element path / link |
+| `<example>` | `ElementDefinition.example` or an extension (phase 2) |
+
+**Precedence chain** (best authoring experience + graceful degradation):
+
+1. Explicit attribute (`[Description]` / a project override) — highest priority, for
+   when published text must differ from the dev‑facing comment.
+2. XML doc `<summary>` → `short`, `<remarks>` → `comment`/`definition` — the default,
+   zero‑extra‑effort path.
+3. Nothing → leave the description empty (do **not** invent text or emit raw tags).
+
+**Gotchas to handle:** the `.xml` must be shipped/located (degrade gracefully if
+missing); doc text is indentation‑polluted and must be whitespace‑normalized; inline
+`<c>`/`<code>`/`<para>`/`<list>` tags should be stripped or converted to Markdown
+(FHIR `definition`/`comment` are `markdown`); entities must be decoded; and
+`<inheritdoc/>` / `<see cref>` are **not** expanded by the compiler — see §9.
+
+## 8. The "driver" artifact — deciding which classes are output
 
 The problem statement specifically asks for *"some artifact to drive which classes
 should be output."* Options, roughly increasing in explicitness:
 
-- **A) Marker attribute on the class** — e.g. `[LogicalModel(Canonical="…", Name="…")]`.
-  - Pros: co‑located with the code, refactor‑safe, self‑documenting, lets you attach
-    per‑model metadata (canonical URL, publisher, status). Discovery = "all types in
-    the assembly with this attribute".
-  - Cons: requires the target project to reference the attribute package.
+- **A) Marker attribute on the class** — reuse **`[FhirType(name, canonical)]`**.
+  - Pros: co‑located with the code, refactor‑safe, self‑documenting, carries the
+    canonical URL per model. Discovery = "all types with `[FhirType]`" (and/or the
+    `[FhirModelAssembly]` marker at assembly level).
+  - Cons: requires the target project to reference the Firely SDK (already a dependency
+    here).
 - **B) A configuration file** (JSON/YAML) listing fully‑qualified type names, output
   paths, canonical base URL, FHIR version, etc.
   - Pros: no source changes needed; can target third‑party assemblies; keeps
@@ -180,36 +250,78 @@ should be output."* Options, roughly increasing in explicitness:
   - Pros: zero per‑type ceremony.
   - Cons: least explicit; easy to over‑ or under‑include.
 
-**Recommendation:** support **(A) marker attribute as the primary driver** (best fit
-for a code‑first philosophy and lets each model carry its own canonical URL /
-metadata), with **(B) a config file** as an override/supplement for cases where the
-source can't be touched or where publishing metadata (base canonical URL, IG version,
-status, output directory) should live outside the code. (C) can be an optional
-convenience switch.
+**Recommendation:** support **(A) `[FhirType]` as the primary driver** (best fit for a
+code‑first philosophy and lets each model carry its own canonical URL), with **(B) a
+config file** as an override/supplement for cases where the source can't be touched or
+where publishing metadata (base canonical URL, IG version, status, output directory)
+should live outside the code. (C) can be an optional convenience switch.
 
 A minimal config file would carry the cross‑cutting settings the attributes
 shouldn't hard‑code: canonical URL base, FHIR release (R4/R5), publisher/status
 defaults, output folder, and an include/exclude list.
 
-## 8. Mapping cheat‑sheet: C# → StructureDefinition
+## 9. Derivation chains — each layer is its own model (specialization, no flattening)
+
+**Decision:** when `Derived : Base` and each class gets its own logical model, we use
+**specialization, not flattening** (Option 2):
+
+- `Derived`'s `StructureDefinition` sets `baseDefinition` = `Base`'s canonical URL,
+  `derivation = specialization`.
+- The differential contains **only the members declared on `Derived` itself** — the
+  inherited members are *not* re‑emitted; they are inherited from `Base`'s model.
+- In reflection terms: enumerate members with **`BindingFlags.DeclaredOnly`** so only
+  the type's own properties are projected. (`Type.GetProperties()` without it would
+  return inherited members too — that would be the flattening approach we are *not*
+  taking.)
+
+This mirrors how FHIR itself expresses derived StructureDefinitions, avoids
+duplicating both elements *and* documentation across every layer, and keeps each
+member documented exactly once — at the point where it is declared.
+
+**Impact on `<inheritdoc/>`.** The C# compiler does **not** expand `<inheritdoc/>`; the
+emitted `.xml` contains the literal tag. Choosing specialization largely *sidesteps*
+this problem: because each layer only emits its own declared members, and those members'
+`<summary>` prose lives natively on the declaring type, there is normally no
+`<inheritdoc/>` to resolve. `Base`'s members are documented in `Base`'s model; `Derived`
+doesn't repeat them.
+
+A **minimal `inheritdoc` resolver** is still worth implementing for the residual cases
+that remain even under specialization:
+
+- A `Derived` member that **`override`s or `new`‑hides** a base member and uses
+  `<inheritdoc/>` — walk the base‑type chain to find the nearest real `<summary>`.
+- `<inheritdoc cref="ISomeInterface.Member"/>` — resolve the cref target (interface docs
+  are not in the base *class* chain).
+- An `override` member with no comment at all — climb to the base declaration for text.
+
+If an `<inheritdoc>` cannot be resolved, leave the description empty rather than emitting
+the literal tag.
+
+## 10. Mapping cheat‑sheet: C# → StructureDefinition
 
 | C# construct | StructureDefinition / ElementDefinition |
 | --- | --- |
-| Class selected for output | `StructureDefinition` `kind=logical`, `derivation=specialization`, root element |
-| Class name / `[LogicalModel(Name=…)]` | `name`, `id`, root element `path` |
-| `[LogicalModel(Canonical=…)]` or config base + name | `url` (canonical), `type` |
-| Public property | child `ElementDefinition` at `Root.prop` |
+| Class selected for output (`[FhirType]`) | `StructureDefinition` `kind=logical`, `derivation=specialization`, root element |
+| Class name / `[FhirType(Name=…)]` | `name`, `id`, root element `path` |
+| `[FhirType(canonical)]` or config base + name | `url` (canonical), `type` |
+| Base class (`Derived : Base`) | `baseDefinition` = `Base` canonical; only own members in differential (`DeclaredOnly`) |
+| Declared public property | child `ElementDefinition` at `Root.prop` |
+| `[FhirElement(Order=…)]` | element `.order` / ordering |
 | Property CLR type (primitive) | `type.code` mapped to FHIR primitive |
 | Property type = another selected class | nested logical model ref / `contentReference` (recurse) |
-| `List<T>` / `IEnumerable<T>` | `max = *` |
+| `[Cardinality(Min,Max)]` (authoritative) | `min` / `max` (`-1`→`*`) |
+| `List<T>` / `IEnumerable<T>` (fallback) | `max = *` |
 | Nullable (`T?` / ref type, via `NullabilityInfoContext`) | `min = 0` |
-| Non‑nullable value type / `required` / `[Required]` | `min = 1` |
-| `enum` | `type.code = code` + generated `ValueSet` + `binding` (phase 2) |
-| XML `<summary>` / `[Description]` | `short` / `definition` |
-| `[Obsolete]` | `ElementDefinition` marked deprecated / `isModifier` note (optional) |
-| Member with `[JsonIgnore]` / `[LogicalIgnore]` | skipped |
+| Non‑nullable value type / `required` | `min = 1` |
+| `[AllowedTypes(...)]` | choice `type[]` (`value[x]`) |
+| `[Binding]` / `enum` | `binding` (+ generated `ValueSet`, phase 2) |
+| `[References(...)]` | `type.targetProfile` |
+| XML `<summary>` | `short` / `definition` |
+| XML `<remarks>` | `comment` / `definition` |
+| `[Obsolete]` | element marked deprecated (optional) |
+| `[NotMapped]` | skipped |
 
-## 9. Suggested shape in this repository
+## 11. Suggested shape in this repository
 
 - A new command/mode (the repo already has a CLI entry point in
   `fml-processor/Program.cs`) such as `fml-processor gen-logical --assembly … --config …`.
@@ -220,15 +332,24 @@ defaults, output folder, and an include/exclude list.
   result into the **existing** FML validator to prove the generated models are usable
   as FML `source`/`target` structures.
 
-## 10. Recommendation summary
+## 12. Recommendation summary
 
 - **Build it as a reflection‑based CLI tool (Option A/C)**, not a source generator —
   it is dramatically less code, reuses the Firely SDK POCOs + serializer already
   referenced here, works on any assembly, and is easy to test in `fml-tester`.
-- **Enrich reflection** with `NullabilityInfoContext` (cardinality) and XML‑doc/
-  attribute parsing (descriptions) to recover the fidelity a pure reflection walk lacks.
-- **Drive selection with a marker attribute** (primary) plus an optional config file
+- **Reuse the Firely SDK's existing attributes** (`[FhirType]`, `[FhirElement]`,
+  `[Cardinality]`, `[AllowedTypes]`, `[Binding]`, `[References]`, `[NotMapped]`, …) for
+  the structural schema — ideally via `ModelInspector`/`ClassMapping` — instead of
+  inventing new ones.
+- **Use XML doc comments for the documentation prose** (`<summary>`→`short`,
+  `<remarks>`→`comment`/`definition`), since no Firely attribute carries description
+  text. Enrich reflection with `NullabilityInfoContext` for cardinality where
+  `[Cardinality]` is absent.
+- **Drive selection with `[FhirType]`** (primary) plus an optional config file
   (for canonical URL base, FHIR version, output paths, and third‑party types).
+- **Model derivation chains as specialization, not flattening** — each layer emits only
+  its own declared members (`DeclaredOnly`) with `baseDefinition` set to its parent,
+  which also makes `<inheritdoc/>` a rare edge case rather than a core requirement.
 - **Keep the projection logic in a standalone class** so a Roslyn source generator
   (Option B) could be added later for compile‑time guarantees without rewriting the
   core mapping.
@@ -240,4 +361,4 @@ defaults, output folder, and an include/exclude list.
 - How should nested/complex types be represented — inline `BackboneElement`‑style
   paths, or separate logical models linked by canonical/`contentReference`?
 - Are terminology bindings (enums → `ValueSet`) in scope for v1, or a later phase?
-- Canonical URL scheme (per‑type attribute vs. base‑URL‑plus‑name from config)?
+- Canonical URL scheme (per‑type `[FhirType(canonical)]` vs. base‑URL‑plus‑name from config)?
