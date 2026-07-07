@@ -280,7 +280,7 @@ sourceListMode
 
 targetListMode
     : 'first'
-    | 'share' ID    // ID is the listRuleId; rules sharing the same id are coalesced into one target instance
+    | 'share' (ID | DOUBLE_QUOTED_STRING)    // ID is the listRuleId; rules sharing the same id are coalesced into one target instance
     | 'last'
     | 'single'
     ;
