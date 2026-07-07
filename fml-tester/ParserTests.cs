@@ -371,5 +371,34 @@ namespace fml_tester
             Assert.AreEqual("tgt", rule.Targets[0].Context);
             Assert.AreEqual("name", rule.Targets[0].Element);
         }
+
+        [TestMethod]
+        public void TestSingleRuleParsing()
+        {
+            Rule r = FmlParser.ParseRule("src.patient -> tgt.subject; // renamed");
+            Assert.IsNotNull(r);
+        }
+
+        [TestMethod]
+        public void TestMultipleRuleParsing()
+        {
+            // A sequence of rules as found inside a group body, but without the enclosing braces.
+            var rules = FmlParser.ParseRules("""
+                src.patient -> tgt.subject; // renamed
+                src.name -> tgt.name;
+                src.birthDate -> tgt.birthDate "dob";
+                """).ToList();
+
+            Assert.AreEqual(3, rules.Count, "Should parse three rules in sequence");
+
+            Assert.AreEqual("patient", rules[0].Sources[0].Element);
+            Assert.AreEqual("subject", rules[0].Targets[0].Element);
+
+            Assert.AreEqual("name", rules[1].Sources[0].Element);
+            Assert.AreEqual("name", rules[1].Targets[0].Element);
+
+            Assert.AreEqual("birthDate", rules[2].Sources[0].Element);
+            Assert.AreEqual("dob", rules[2].Name);
+        }
     }
 }

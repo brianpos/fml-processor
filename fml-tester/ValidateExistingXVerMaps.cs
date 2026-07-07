@@ -69,7 +69,28 @@ namespace fml_tester
                             if (use.Alias != null)
                                 aliasedTypes.Add(use.Alias, sd);
                             else if (sd != null && sd.Name != null)
+                            {
+                                // before adding it, check to see if this specific one is already registered
+                                if (!aliasedTypes.ContainsKey(sd.Name))
+                                {
                                 aliasedTypes.Add(use.Alias ?? sd.Name, sd);
+                        }
+                                else
+                                {
+                                    var existingRegisteredSd = aliasedTypes[sd.Name];
+                                    if (existingRegisteredSd?.Url == sd.Url
+                                        && existingRegisteredSd?.Version == sd.Version
+                                        && existingRegisteredSd?.FhirVersion == sd.FhirVersion)
+                                    {
+                                        // The same structure definition is already registered
+                                    }
+                                    else
+                                    {
+                                        // Duplicate name encountered
+                                        Console.WriteLine($"\nError: Duplicate alias detected {sd.Name} at @{use.Position?.StartLine}:{use.Position?.StartColumn}");
+                                    }
+                                }
+                            }
                         }
                         string? typeMapping = null;
                         foreach (var gp in group.Parameters)
@@ -176,7 +197,8 @@ namespace fml_tester
             js.TryDeserializeResource(jsonResources, out Resource? bundleResources, out issues);
 
             var imr = new InMemoryResourceResolver();
-            var types = (bundleTypes as Bundle).Entry.Select(e => e.Resource).OfType<StructureDefinition>().Select(e => {
+            var types = (bundleTypes as Bundle).Entry.Select(e => e.Resource).OfType<StructureDefinition>().Select(e =>
+            {
                 if (fhirVersion == "R3")
                 {
                     PatchPrimitiveTypes(e, "http://hl7.org/fhir/StructureDefinition/boolean", "boolean.value", "boolean", "http://hl7.org/fhirpath/System.Boolean");
@@ -218,6 +240,7 @@ namespace fml_tester
                 "R4" => "4.0",
                 "R4B" => "4.3",
                 "R5" => "5.0",
+                "R6" => "6.0",
                 _ => throw new ArgumentException($"Unsupported FHIR version: {fhirVersion}", nameof(fhirVersion))
             };
             IAsyncResourceResolver resolver = new CachedResolver(
@@ -560,6 +583,31 @@ namespace fml_tester
             }
 
             Assert.AreEqual(0, issues, "There were FML validation issues detected");
+        }
+
+        /// <summary>
+        /// Convert from the Rx format to the x.y format
+        /// </summary>
+        /// <param name="ver"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        private string ConvertVersionString(string ver)
+        {
+            switch (ver)
+            {
+                case "R3":
+                    return "3.0";
+                case "R4":
+                    return "4.0";
+                case "R4B":
+                    return "4.3";
+                case "R5":
+                    return "5.0";
+                case "R6":
+                    return "6.0";
+                default:
+                    throw new ArgumentException($"Unsupported FHIR version: {ver}", nameof(ver));
+            }
         }
     }
 }

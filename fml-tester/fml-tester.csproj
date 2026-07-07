@@ -9,8 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="brianpos.Fhir.R5.MappingLanguage" Version="5.12.1-beta2" />
-    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="brianpos.Fhir.R5.MappingLanguage" Version="5.13.4-beta1" />
+    <PackageReference Include="MSTest" Version="4.2.3" />
   </ItemGroup>
 
   <ItemGroup>
