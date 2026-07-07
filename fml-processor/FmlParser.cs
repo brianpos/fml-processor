@@ -174,6 +174,31 @@ public static class FmlParser
         return Parse<Rule>(ruleText, (parser) => parser.mapRule());
     }
 
+    public static IEnumerable<Rule> ParseRules(string ruleText)
+    {
+        return ParseMany<Rule>(ruleText, (parser) =>
+        {
+            var ruleContexts = new List<IParseTree>();
+
+            // Parse rules in sequence until the end of the input is reached
+            // (as found inside a group body, but without the enclosing braces).
+            while (parser.TokenStream.LA(1) != FmlMappingParser.Eof)
+            {
+                int positionBefore = parser.TokenStream.Index;
+                ruleContexts.Add(parser.mapRule());
+
+                // Guard against making no progress (e.g. an unrecoverable parse
+                // error that does not consume any tokens) to avoid an infinite loop.
+                if (parser.TokenStream.Index == positionBefore)
+                {
+                    break;
+                }
+            }
+
+            return ruleContexts;
+        });
+    }
+
     public static T Parse<T>(string fshText, Func<FmlMappingParser, IParseTree> parseNode)
         where T : FmlNode
     {
@@ -251,6 +276,97 @@ public static class FmlParser
             }
 
             return document;
+        }
+        catch (Exception ex)
+        {
+            var issues = new List<ParseError>
+            {
+                new ParseError
+                {
+                    Severity = ErrorSeverity.Error,
+                    Code = "exception",
+                    Message = ex.Message,
+                    Location = "@0:0",
+                    Line = 0,
+                    Column = 0
+                }
+            };
+            throw new FmlParseException(
+                "Failed to parse FML text",
+                issues);
+        }
+    }
+
+    public static IEnumerable<T> ParseMany<T>(string fmlText, Func<FmlMappingParser, IEnumerable<IParseTree>> parseNodes)
+        where T : FmlNode
+    {
+        if (string.IsNullOrEmpty(fmlText))
+        {
+            var issues = new List<ParseError>
+            {
+                new ParseError
+                {
+                    Severity = ErrorSeverity.Error,
+                    Code = "empty-input",
+                    Message = "Input FSH text is null or empty",
+                    Location = "@0:0",
+                    Line = 0,
+                    Column = 0
+                }
+            };
+            throw new FmlParseException(
+                "Failed to parse FML text",
+                issues);
+        }
+
+        try
+        {
+            // Create ANTLR input stream
+            var inputStream = new AntlrInputStream(fmlText);
+
+            // Create lexer
+            var lexer = new FmlMappingLexer(inputStream);
+
+            // Create token stream
+            var tokenStream = new CommonTokenStream(lexer);
+
+            // Create parser
+            var parser = new FmlMappingParser(tokenStream);
+
+            // Add custom error listener
+            var errorListener = new FmlParserErrorListener();
+            parser.RemoveErrorListeners(); // Remove default console error listener
+            parser.AddErrorListener(errorListener);
+
+            // Parse the nodes (materialize so all parsing completes before checking errors)
+            var trees = parseNodes(parser).ToList();
+
+            // Check for parsing errors
+            var errors = errorListener.GetErrors();
+            if (errors.Count > 0)
+            {
+                throw new FmlParseException(
+                    "Failed to parse FML text",
+                    errors);
+            }
+
+            // Build the object model using the visitor
+            var visitor = new FmlMappingModelVisitor(tokenStream);
+            var results = new List<T>();
+            foreach (var tree in trees)
+            {
+                if (visitor.Visit(tree) is T node)
+                {
+                    results.Add(node);
+                }
+            }
+
+            return results;
+        }
+        catch (FmlParseException)
+        {
+            // Preserve the detailed parse errors collected above.
+            throw;
         }
         catch (Exception ex)
         {

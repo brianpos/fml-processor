@@ -26,6 +26,18 @@ public class NotPopulatedElementAnnotation : ElementDefAnnotation
     }
 }
 
+public class StructureDefAnnotation
+{
+    public StructureDefAnnotation(StructureDefinition definition)
+    {
+        this.definition = definition;
+    }
+
+    public StructureDefinition definition { get; private set; }
+
+    public string? RestrictedToType { get; set; }
+}
+
 public class ElementDefAnnotation
 {
     public ElementDefAnnotation(ElementDefinition definition)

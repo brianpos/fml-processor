@@ -9,6 +9,7 @@ using Hl7.Fhir.Model;
 using Hl7.Fhir.Rest;
 using Hl7.Fhir.Specification.Navigation;
 using Hl7.Fhir.Specification.Source;
+using Hl7.Fhir.Support;
 using Hl7.Fhir.Utility;
 using Hl7.FhirPath;
 using System.Runtime.CompilerServices;
@@ -24,6 +25,7 @@ public class FmlValidator
     public static async Task<OperationOutcome> VerifyFmlDataTypes(FmlStructureMap fml, ValidateMapOptions options)
     {
         Console.WriteLine($"Validating map {fml.MapDeclaration?.Url ?? fml.Metadata.FirstOrDefault(m => m.Path == "url")?.Value}");
+        OperationOutcome outcome = new OperationOutcome();
 
         // TODO:
         // * All the function invocation return types
@@ -41,7 +43,22 @@ public class FmlValidator
             if (use.Alias != null)
                 _aliasedTypes.Add(use.Alias, sd);
             else if (sd != null && sd.Name != null)
-                _aliasedTypes.Add(use.Alias ?? sd.Name, sd);
+            {
+                if (!_aliasedTypes.ContainsKey(sd.Name))
+                    _aliasedTypes.Add(use.Alias ?? sd.Name, sd);
+                else
+                {
+                    var existingRegisteredSd = _aliasedTypes[sd.Name];
+                    if (existingRegisteredSd?.Url != sd.Url
+                        || existingRegisteredSd?.Version != sd.Version
+                        || existingRegisteredSd?.FhirVersion != sd.FhirVersion)
+                    {
+                        // Duplicate name encountered
+                        string msg = $"Alias {sd.Name} duplicates alias already registered for definition {existingRegisteredSd?.Url}|{existingRegisteredSd?.Version} cannot reallocate to {sd.Url}|{sd.Version} at @{use.Position?.StartLine}:{use.Position?.StartColumn}";
+                        ReportIssue(outcome.Issue, msg, OperationOutcome.IssueType.Duplicate);
+                    }
+                }
+            }
             if (sd != null)
             { 
                 use.SetAnnotation(sd);
@@ -57,7 +74,6 @@ public class FmlValidator
         //}
 
         // scan all the groups
-        OperationOutcome outcome = new OperationOutcome();
         foreach (var group in fml.Groups)
         {
             var results = VerifyFmlDataTypesForGroup(fml, group, _aliasedTypes, options);
