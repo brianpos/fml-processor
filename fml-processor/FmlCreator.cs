@@ -18,23 +18,34 @@ public class FmlCreator
     public Dictionary<string, StructureDefinition> Source = new Dictionary<string, StructureDefinition>();
     public Dictionary<string, StructureDefinition> Target = new Dictionary<string, StructureDefinition>();
 
-    private static void AppendKnownRule(Dictionary<string, Rule> rules, string name, string ruleText, string? comment = null)
+    /// <summary>
+    /// Appends known rules to the provided dictionary.
+    /// </summary>
+    /// <param name="rules">The dictionary to which the rules will be added.</param>
+    /// <param name="name">The name of the rule set.</param>
+    /// <param name="ruleText">The FML text representing the rules.</param>
+    /// <param name="comment">An optional comment to annotate the first rule.</param>
+    private static void AppendKnownRules(Dictionary<string, IEnumerable<Rule>> rules, string name, string ruleText, string? comment = null)
     {
-        var rule = FmlParser.ParseRule(ruleText);
+        var rule = FmlParser.ParseRules(ruleText);
         if (!string.IsNullOrEmpty(comment))
-            rule.SetAnnotation(new MapCommentAnnotation(comment));
+            rule.First().SetAnnotation(new MapCommentAnnotation(comment));
         rules.Add(name, rule);
     }
 
-    private static Dictionary<string, Rule> CreateCustomRules()
+    private static Dictionary<string, IEnumerable<Rule>> CreateCustomRules()
     {
-        var rules = new Dictionary<string, Rule>();
-        AppendKnownRule(rules, "Account.relatedAccount", "Account.relatedAccount as ra then { ra.account -> tgt.parent; ra.account -> tgt.guarantor as g, g.account = ra.account; } \"ra\";",
+        var rules = new Dictionary<string, IEnumerable<Rule>>();
+        AppendKnownRules(rules, "Account.relatedAccount", "Account.relatedAccount as ra then { ra.account -> tgt.parent; ra.account -> tgt.guarantor as g, g.account = ra.account; } \"ra\";",
             "maps to both Account.parent and Account.guarantor.account depending on the value of relatedAccount.relationship");
+
+        AppendKnownRules(rules, "Consent.source[x]", "  // Source splits into separate properties based on type\n  src.source : Attachment -> tgt.sourceAttachment;  src.source : Reference -> tgt.sourceReference;");
+        AppendKnownRules(rules, "ActivityDefinition.dosage", "  src where (dosage.exists()) -> tgt.dosageInstruction as di then {\r\n    // each dosage goes into a new step, and the dosage is mapped to the component of that step\r\n    src.dosage as sd -> di.step as s, s.component = sd;\r\n  } \"mapDosageInstructions\";\r\n");
+        AppendKnownRules(rules, "RelatedArtifact.url", "src.url as u where (src.document.empt()) -> tgt.document as d, d.url = u \"setUrl\"; // need to check if this impacts existing document");
         return rules;
     }
 
-    public Dictionary<string, Rule> KnownCustomRules = CreateCustomRules();
+    public Dictionary<string, IEnumerable<Rule>> KnownCustomRules = CreateCustomRules();
 
     public HashSet<string> KnownMappings = [
         // R4 to R6 specific known mappings
@@ -49,6 +60,11 @@ public class FmlCreator
         "AuditEvent.period -> AuditEvent.occurred",
 
         "BiologicallyDerivedProduct.collection.source -> BiologicallyDerivedProduct.collection.sourcePatient",
+
+        "BodyStructure.morphology -> BodyStructure.includedStructure.morphology",
+        "BodyStructure.location -> BodyStructure.includedStructure.structure",
+        "BodyStructure.locationQualifier -> BodyStructure.includedStructure.qualifier",
+
         "AdverseEvent.event -> AdverseEvent.code",
         "AdverseEvent.date -> AdverseEvent.effect",
         "AdverseEvent.resultingCondition -> AdverseEvent.resultingEffect",
@@ -61,6 +77,11 @@ public class FmlCreator
         "CarePlan.activity.reference -> CarePlan.activity.plannedActivityReference",
 
         "Claim.careTeam.qualification -> Claim.careTeam.specialty",
+        "Claim.prescription -> Claim.request",
+        "Claim.item.bodySite -> Claim.item.bodySite.site",
+        "Claim.item.subSite -> Claim.item.bodySite.subSite",
+
+        "ClaimResponse.addItem.bodySite -> ClaimResponse.addItem.bodySite.site",
 
         "ClaimResponse.item.adjudication.value -> ClaimResponse.item.adjudication.quantity",
 
@@ -84,6 +105,8 @@ public class FmlCreator
         "Consent.policy.uri -> Consent.policyBasis.uri",
         // "Consent.provision.class -> Consent.provision.documentType", // goes to both documentType and resourceType
 
+        "Coverage.payor -> Coverage.paymentBy.party",
+
         "DetectedIssue.patient -> DetectedIssue.subject",
 
         "Device.deviceName -> Device.name",
@@ -105,7 +128,7 @@ public class FmlCreator
         "DiagnosticReport.imagingStudy -> DiagnosticReport.study",
 
         "DocumentReference.masterIdentifier -> DocumentReference.identifier",
-        // "DocumentReference.content.format -> DocumentReference.content.profile.value", // nested property and why is this a backbone element! should just be a value ticket please...
+        "DocumentReference.content.format -> DocumentReference.content.profile.value", // nested property and why is this a backbone element! should just be a value ticket please...
 
         "Encounter.participant.individual -> Encounter.participant.actor",
         "Encounter.period -> Encounter.actualPeriod",
@@ -131,11 +154,18 @@ public class FmlCreator
         "ExampleScenario.instance.containedInstance.resourceId -> ExampleScenario.instance.containedInstance.instanceReference",
         "ExampleScenario.instance.containedInstance.versionId -> ExampleScenario.instance.containedInstance.versionReference",
 
+        "ExplanationOfBenefit.prescription -> ExplanationOfBenefit.request",
+        "ExplanationOfBenefit.item.bodySite -> ExplanationOfBenefit.item.bodySite.site",
+        "ExplanationOfBenefit.item.subSite -> ExplanationOfBenefit.item.bodySite.subSite",
+        "ExplanationOfBenefit.addItem.bodySite -> ExplanationOfBenefit.addItem.bodySite.site",
+        "ExplanationOfBenefit.addItem.subSite -> ExplanationOfBenefit.addItem.bodySite.subSite",
         "ExplanationOfBenefit.careTeam.qualification -> ExplanationOfBenefit.careTeam.specialty",
         "ExplanationOfBenefit.item.adjudication.value -> ExplanationOfBenefit.item.adjudication.quantity",
 
         "FamilyMemberHistory.reasonCode -> FamilyMemberHistory.reason",
         "FamilyMemberHistory.reasonReference -> FamilyMemberHistory.reason",
+
+        "Goal.expressedBy -> Goal.source",
 
         "GuidanceResponse.reasonCode -> GuidanceResponse.reason",
         "GuidanceResponse.reasonReference -> GuidanceResponse.reason",
@@ -185,6 +215,8 @@ public class FmlCreator
 
         "MedicationRequest.reported -> MedicationRequest.isRecordOfRequest",
 
+        "MessageHeader.sender -> MessageHeader.source.sender",
+
         "NutritionOrder.patient -> NutritionOrder.subject",
         "NutritionOrder.enteralFormula.maxVolumeToDeliver -> NutritionOrder.enteralFormula.maxVolumeToAdminister",
         "NutritionOrder.enteralFormula.routeofAdministration -> NutritionOrder.enteralFormula.routeOfAdministration",
@@ -220,6 +252,55 @@ public class FmlCreator
         "Procedure.usedCode -> Procedure.used",
         "Procedure.asserter -> Procedure.reported",
 
+        "RequestGroup.identifier -> RequestOrchestration.identifier",
+        "RequestGroup.instantiatesCanonical -> RequestOrchestration.instantiatesCanonical",
+        "RequestGroup.instantiatesUri -> RequestOrchestration.instantiatesUri",
+        "RequestGroup.basedOn -> RequestOrchestration.basedOn",
+        "RequestGroup.replaces -> RequestOrchestration.replaces",
+        "RequestGroup.groupIdentifier -> RequestOrchestration.groupIdentifier",
+        "RequestGroup.status -> RequestOrchestration.status",
+        "RequestGroup.intent -> RequestOrchestration.intent",
+        "RequestGroup.priority -> RequestOrchestration.priority",
+        "RequestGroup.code -> RequestOrchestration.code",
+        "RequestGroup.subject -> RequestOrchestration.subject",
+        "RequestGroup.encounter -> RequestOrchestration.encounter",
+        "RequestGroup.authoredOn -> RequestOrchestration.authoredOn",
+        "RequestGroup.author -> RequestOrchestration.author",
+        "RequestGroup.reasonCode -> RequestOrchestration.reason",
+        "RequestGroup.reasonReference -> RequestOrchestration.reason",
+        "RequestGroup.note -> RequestOrchestration.note",
+
+        "RequestGroup.action -> RequestOrchestration.action",
+        "RequestGroup.action.prefix -> RequestOrchestration.action.prefix",
+        "RequestGroup.action.title -> RequestOrchestration.action.title",
+        "RequestGroup.action.description -> RequestOrchestration.action.description",
+        "RequestGroup.action.textEquivalent -> RequestOrchestration.action.textEquivalent",
+        "RequestGroup.action.priority -> RequestOrchestration.action.priority",
+        "RequestGroup.action.code -> RequestOrchestration.action.code",
+        "RequestGroup.action.timing -> RequestOrchestration.action.timing",
+        "RequestGroup.action.resource -> RequestOrchestration.action.resource",
+        "RequestGroup.action.documentation -> RequestOrchestration.action.documentation",
+
+        "RequestGroup.action.condition -> RequestOrchestration.action.condition",
+        "RequestGroup.action.condition.kind -> RequestOrchestration.action.condition.kind",
+        "RequestGroup.action.condition.expression -> RequestOrchestration.action.condition.expression",
+
+        "RequestGroup.action.relatedAction -> RequestOrchestration.action.relatedAction",
+        "RequestGroup.action.relatedAction.actionId -> RequestOrchestration.action.relatedAction.targetId",
+        "RequestGroup.action.relatedAction.relationship -> RequestOrchestration.action.relatedAction.relationship",
+        "RequestGroup.action.relatedAction.offset -> RequestOrchestration.action.relatedAction.offset",
+
+        "RequestGroup.action.type -> RequestOrchestration.action.type",
+        "RequestGroup.action.groupingBehavior -> RequestOrchestration.action.groupingBehavior",
+        "RequestGroup.action.selectionBehavior -> RequestOrchestration.action.selectionBehavior",
+        "RequestGroup.action.requiredBehavior -> RequestOrchestration.action.requiredBehavior",
+        "RequestGroup.action.precheckBehavior -> RequestOrchestration.action.precheckBehavior",
+        "RequestGroup.action.cardinalityBehavior -> RequestOrchestration.action.cardinalityBehavior",
+
+        "RequestGroup.action.participant -> RequestOrchestration.action.participant.actor",
+        "RequestGroup.action.action -> RequestOrchestration.action.action",
+
+
         "ResearchSubject.individual -> ResearchSubject.subject",
 
         "RiskAssessment.reasonCode -> RiskAssessment.reason",
@@ -230,12 +311,18 @@ public class FmlCreator
         "ServiceRequest.reasonCode -> ServiceRequest.reason",
         "ServiceRequest.reasonReference -> ServiceRequest.reason",
 
+        "Specimen.collection.bodySite -> Specimen.collection.bodyStructure",
+
         "StructureMap.group.rule.dependent.variable -> StructureMap.group.rule.dependent.parameter",
 
         "Task.reasonCode -> Task.reason",
         "Task.reasonReference -> Task.reason",
 
+
+
+        // ------------------------------------------------------------
         // R5 to R6 specific known mappings
+        // ------------------------------------------------------------
         "Account.relatedAccount.account -> Account.parent",
         "Account.relatedAccount.account -> Account.guarantor.account",
 
@@ -244,7 +331,7 @@ public class FmlCreator
 
         "AdverseEvent.occurrence -> AdverseEvent.effect",
 
-        "AllergyIntolerance.lastOccurrence -> AllergyIntolerance.lastReactionOccurrence",
+        //"AllergyIntolerance.lastOccurrence -> AllergyIntolerance.lastReactionOccurrence",
 
         "AuditEvent.category -> AuditEvent.type",
         "AuditEvent.code -> AuditEvent.subtype",
@@ -278,6 +365,9 @@ public class FmlCreator
 
         "ExplanationOfBenefit.patient -> ExplanationOfBenefit.subject",
 
+        "Goal.statusReason -> Goal.lifecycleStatusReason",
+        "Goal.statusDate -> Goal.achievementStatusDate",
+
         "MedicationAdministration.occurence -> MedicationAdministration.occurrence",
 
         "MedicationRequest.effectiveDosePeriod -> MedicationRequest.effectiveTiming",
@@ -305,15 +395,18 @@ public class FmlCreator
         // iterate over all the source resources
         foreach (var sourceR in Source)
         {
-            if (Target.ContainsKey(sourceR.Key))
+            var targetResourceName = sourceR.Key;
+            if (targetResourceName == "http://hl7.org/fhir/StructureDefinition/RequestGroup")
+                targetResourceName = "http://hl7.org/fhir/StructureDefinition/RequestOrchestration";
+            if (Target.ContainsKey(targetResourceName))
             {
-                FmlStructureMap fml = CreateMap(sourceR.Value, Target[sourceR.Key]);
+                FmlStructureMap fml = CreateMap(sourceR.Value, Target[targetResourceName]);
                 if (fml != null)
                     result.Add(fml);
             }
             else
             {
-                // Console.WriteLine($"No target mapping for source type {sourceR.Key}");
+                Console.WriteLine($"No target mapping for source type {sourceR.Key}");
             }
         }
 
@@ -365,6 +458,8 @@ public class FmlCreator
             Type = targetAlies,
             Name = "tgt"
         });
+        group.Parameters[0].SetAnnotation(new StructureDefAnnotation(sourceSd));
+        group.Parameters[1].SetAnnotation(new StructureDefAnnotation(targetSd));
         group.Extends = sourceSd.BaseDefinition?.Replace("http://hl7.org/fhir/StructureDefinition/", "");
         if (group.Extends == "Base")
             group.Extends = null;
@@ -395,8 +490,8 @@ public class FmlCreator
             // check if there's a custom rule for this element first
             if (KnownCustomRules.ContainsKey(currentElementPath))
             {
-                var ruleCustom = KnownCustomRules[currentElementPath];
-                groupStack.Peek().Rules.Add(ruleCustom);
+                var ruleCustoms = KnownCustomRules[currentElementPath];
+                groupStack.Peek().Rules.AddRange(ruleCustoms);
             }
             else
             {
@@ -478,12 +573,15 @@ public class FmlCreator
 
                         if (se.Path.Replace("[x]", "") != matchingTe.Path.Replace("[x]", ""))
                         {
-                            rule.TrailingHiddenTokens ??= new List<HiddenToken>();
-                            rule.TrailingHiddenTokens.Add(new HiddenToken()
+                            if (rule.Sources.Count == rule.Targets.Count && rule.Sources.Count == 1 && rule.Sources[0].Element != rule.Targets[0].Element)
                             {
-                                TokenType = FmlMappingLexer.LINE_COMMENT,
-                                Text = " // renamed"
-                            });
+                                rule.TrailingHiddenTokens ??= new List<HiddenToken>();
+                                rule.TrailingHiddenTokens.Add(new HiddenToken()
+                                {
+                                    TokenType = FmlMappingLexer.LINE_COMMENT,
+                                    Text = " // renamed"
+                                });
+                            }
                             rule.SetAnnotation(new ElementRenamedAnnotation());
                             rule.Sources[0].SetAnnotation(new ElementDefAnnotation(se));
                             rule.Targets[0].SetAnnotation(new ElementDefAnnotation(matchingTe));
