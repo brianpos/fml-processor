@@ -6,7 +6,14 @@
     <RootNamespace>fml_processor</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-  </PropertyGroup>
+		<PackageId>Hl7.Fhir.MappingLanguage</PackageId>
+		<Title>HL7 FHIR Mapping Language Serialization</Title>
+		<Description>Parse, serialize and Validate FHIR Mapping Language (FML) text. Produces a strongly-typed object model (FmlStructureMap) that can be inspected, transformed, and round-tripped back to FML with full comment and whitespace fidelity.</Description>
+		<PackageTags>FHIR;FML;FHIRMappingLanguage;HL7;parser;serializer;validator</PackageTags>
+		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
@@ -15,7 +22,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="README.md" Pack="true" PackagePath="\" />
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\LICENSE.txt" Pack="true" PackagePath="\" />
 	</ItemGroup>
 </Project>

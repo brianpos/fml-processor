@@ -41,7 +41,7 @@ code
   ;
 
 mapDeclaration
-  : 'map' url '=' identifier
+  : 'map' url '=' (identifier | DOUBLE_QUOTED_STRING)
   ;
 
 metadataDeclaration

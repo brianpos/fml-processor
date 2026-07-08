@@ -109,17 +109,37 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
 
         if (context.literal() != null)
         {
-            metadata.Value = Visit(context.literal())?.ToString();
+            var literal = context.literal();
+            metadata.ValueKind = GetMetadataValueKind(literal);
+
+            // Bare literals (boolean, number, date/time) are stored with their raw source text
+            // so they round-trip unquoted. String literals keep their unquoted content.
+            metadata.Value = metadata.ValueKind == MetadataValueKind.String
+                ? Visit(literal)?.ToString()
+                : literal.GetText();
+
             metadata.IsMarkdown = false;
         }
         else if (context.markdownLiteral() != null)
         {
-            metadata.Value = ExtractString(context.markdownLiteral().GetText());
+            metadata.Value = ExtractMarkdown(context.markdownLiteral().GetText());
             metadata.IsMarkdown = true;
         }
 
         return metadata;
     }
+
+    private static MetadataValueKind GetMetadataValueKind(FmlMappingParser.LiteralContext literal) => literal switch
+    {
+        FmlMappingParser.BooleanLiteralContext => MetadataValueKind.Boolean,
+        FmlMappingParser.NumberLiteralContext => MetadataValueKind.Number,
+        FmlMappingParser.LongNumberLiteralContext => MetadataValueKind.Number,
+        FmlMappingParser.QuantityLiteralContext => MetadataValueKind.Number,
+        FmlMappingParser.DateLiteralContext => MetadataValueKind.Date,
+        FmlMappingParser.DateTimeLiteralContext => MetadataValueKind.DateTime,
+        FmlMappingParser.TimeLiteralContext => MetadataValueKind.Time,
+        _ => MetadataValueKind.String
+    };
 
     public override object? VisitConceptMapDeclaration([NotNull] FmlMappingParser.ConceptMapDeclarationContext context)
     {
@@ -190,13 +210,18 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
 
     public override object? VisitMapDeclaration([NotNull] FmlMappingParser.MapDeclarationContext context)
     {
+        string id;
+        if (context.identifier() != null)
+            id = context.identifier()?.GetText();
+        else
+            id = context.DOUBLE_QUOTED_STRING()?.GetText();
         return new MapDeclaration
         {
             Position = GetPosition(context),
             LeadingHiddenTokens = GetLeadingHiddenTokens(context),
             TrailingHiddenTokens = GetTrailingHiddenTokens(context),
             Url = ExtractString(context.url().GetText()),
-            Identifier = context.identifier().GetText()
+            Identifier = id
         };
     }
 
@@ -348,6 +373,49 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
     public override object? VisitMapFhirMarkup([NotNull] FmlMappingParser.MapFhirMarkupContext context)
     {
         return Visit(context.mapTransformationRule());
+    }
+
+    public override object? VisitMapSimpleBatchIdentity([NotNull] FmlMappingParser.MapSimpleBatchIdentityContext context)
+    {
+        var rule = new Rule
+        {
+            Position = GetPosition(context),
+            LeadingHiddenTokens = GetLeadingHiddenTokens(context),
+            TrailingHiddenTokens = GetTrailingHiddenTokens(context)
+        };
+
+        // Parse as a simple source -> target : field1, field2 pattern
+        var sourcePath = context.qualifiedIdentifier(0).GetText();
+        var targetPath = context.qualifiedIdentifier(1).GetText();
+
+        // Split into context.element
+        var (sourceContext, sourceElement) = SplitPath(sourcePath);
+        var (targetContext, targetElement) = SplitPath(targetPath);
+
+        rule.Sources.Add(new RuleSource
+        {
+            Context = sourceContext,
+            Element = sourceElement
+        });
+
+        rule.Targets.Add(new RuleTarget
+        {
+            Context = targetContext,
+            Element = targetElement
+        });
+
+        // Identity field list (marks this rule as a batch identity rule)
+        rule.IdentityFields = context.identityFieldList()
+            .identifier()
+            .Select(id => id.GetText())
+            .ToList();
+
+        if (context.ruleName() != null)
+        {
+            rule.Name = ExtractString(context.ruleName().GetText());
+        }
+
+        return rule;
     }
 
     public override object? VisitMapTransformationRule([NotNull] FmlMappingParser.MapTransformationRuleContext context)
@@ -530,7 +598,18 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
 
         if (context.targetListMode() != null)
         {
-            target.ListMode = ParseTargetListMode(context.targetListMode().GetText());
+            var listModeCtx = context.targetListMode();
+            target.ListMode = ParseTargetListMode(listModeCtx);
+
+            // 'share' carries a list-rule id (an ID or a double-quoted string)
+            if (listModeCtx.DOUBLE_QUOTED_STRING() != null)
+            {
+                target.ListRuleId = ExtractString(listModeCtx.DOUBLE_QUOTED_STRING().GetText());
+            }
+            else if (listModeCtx.ID() != null)
+            {
+                target.ListRuleId = listModeCtx.ID().GetText();
+            }
         }
 
         return target;
@@ -776,6 +855,55 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         return quotedString;
     }
 
+    private static string ExtractMarkdown(string tripleQuotedString)
+    {
+        // Grammar: '"""' [\r\n] (.)*? [\r\n] '"""' ('\r\n'|'\r'|'\n'|EOF)
+        // Strip the surrounding triple quotes plus the single line terminator that the
+        // grammar requires immediately after the opening and before the closing delimiter,
+        // leaving only the inner markdown content (delimiters are not part of the value).
+        var text = tripleQuotedString;
+
+        // Remove the optional trailing line terminator that follows the closing delimiter.
+        if (text.EndsWith("\r\n"))
+        {
+            text = text[..^2];
+        }
+        else if (text.EndsWith("\n") || text.EndsWith("\r"))
+        {
+            text = text[..^1];
+        }
+
+        if (text.Length < 6 || !text.StartsWith("\"\"\"") || !text.EndsWith("\"\"\""))
+        {
+            return tripleQuotedString;
+        }
+
+        // Drop the opening and closing triple quotes.
+        var inner = text[3..^3];
+
+        // Drop the required leading line terminator.
+        if (inner.StartsWith("\r\n"))
+        {
+            inner = inner[2..];
+        }
+        else if (inner.StartsWith("\n") || inner.StartsWith("\r"))
+        {
+            inner = inner[1..];
+        }
+
+        // Drop the required trailing line terminator.
+        if (inner.EndsWith("\r\n"))
+        {
+            inner = inner[..^2];
+        }
+        else if (inner.EndsWith("\n") || inner.EndsWith("\r"))
+        {
+            inner = inner[..^1];
+        }
+
+        return inner;
+    }
+
     private static StructureMode ParseStructureMode(string mode)
     {
         return mode.ToLowerInvariant() switch
@@ -821,9 +949,16 @@ public class FmlMappingModelVisitor : FmlMappingBaseVisitor<object?>
         };
     }
 
-    private static TargetListMode? ParseTargetListMode(string mode)
+    private static TargetListMode? ParseTargetListMode(FmlMappingParser.TargetListModeContext context)
     {
-        return mode.ToLowerInvariant() switch
+        // 'share' is the only mode followed by a list-rule id (ID or DOUBLE_QUOTED_STRING),
+        // so GetText() would concatenate the keyword and the id. Detect it structurally.
+        if (context.ID() != null || context.DOUBLE_QUOTED_STRING() != null)
+        {
+            return TargetListMode.Share;
+        }
+
+        return context.GetText().ToLowerInvariant() switch
         {
             "first" => TargetListMode.First,
             "last" => TargetListMode.Last,

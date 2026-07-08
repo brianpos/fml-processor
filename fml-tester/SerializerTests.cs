@@ -122,6 +122,54 @@ namespace fml_tester
         }
 
         [TestMethod]
+        public void TestSerializeBooleanAndNumberMetadataAsBareLiterals()
+        {
+            var fmlText = """
+                /// url = 'http://example.org/fhir/StructureMap/test'
+                /// experimental = true
+                /// count = 42
+
+                map "http://example.org/fhir/StructureMap/test" = test
+
+                group main(source src, target tgt) {
+                  src -> tgt;
+                }
+                """;
+
+            var parseResult = FmlParser.Parse(fmlText);
+            Assert.IsInstanceOfType<ParseResult.Success>(parseResult);
+
+            var structureMap = ((ParseResult.Success)parseResult).StructureMap;
+
+            // The literal kind is preserved on the model
+            var experimental = structureMap.Metadata.First(m => m.Path == "experimental");
+            Assert.AreEqual(MetadataValueKind.Boolean, experimental.ValueKind);
+            Assert.AreEqual("true", experimental.Value);
+
+            var count = structureMap.Metadata.First(m => m.Path == "count");
+            Assert.AreEqual(MetadataValueKind.Number, count.ValueKind);
+            Assert.AreEqual("42", count.Value);
+
+            var serialized = FmlSerializer.Serialize(structureMap);
+
+            // Boolean/number values are emitted bare, not as quoted strings
+            Assert.IsTrue(serialized.Contains("/// experimental = true"),
+                $"Boolean metadata should serialize as a bare literal. Output:\n{serialized}");
+            Assert.IsTrue(serialized.Contains("/// count = 42"),
+                $"Number metadata should serialize as a bare literal. Output:\n{serialized}");
+            Assert.IsFalse(serialized.Contains("'True'") || serialized.Contains("'true'"),
+                $"Boolean metadata must not be quoted. Output:\n{serialized}");
+
+            // And it round-trips back to a boolean literal
+            var reParsed = FmlParser.Parse(serialized);
+            Assert.IsInstanceOfType<ParseResult.Success>(reParsed,
+                $"Serialized boolean/number metadata should parse. Output:\n{serialized}");
+            var reExperimental = ((ParseResult.Success)reParsed).StructureMap.Metadata.First(m => m.Path == "experimental");
+            Assert.AreEqual(MetadataValueKind.Boolean, reExperimental.ValueKind);
+            Assert.AreEqual("true", reExperimental.Value);
+        }
+
+        [TestMethod]
         public void TestSerializeComplexRule()
         {
             var fmlText = """
@@ -633,11 +681,23 @@ namespace fml_tester
         }
 
         [TestMethod]
+        public void TestRoundTripAllExamples()
+        {
+            // Scan all FML files in the R4toR5 directory
+            var fmlDirectory = @"C:\git\hl7-incubators\fml-incubator\input\examples";
+            TestRoundTripMapsInFolder(fmlDirectory);
+        }
+
+        [TestMethod]
         public void TestRoundTripAllR4toR5Maps()
         {
             // Scan all FML files in the R4toR5 directory
             var fmlDirectory = @"c:\git\hl7\fhir-cross-version\input\R4toR5";
-            
+            TestRoundTripMapsInFolder(fmlDirectory);
+        }
+
+        public void TestRoundTripMapsInFolder(string fmlDirectory)
+        {
             if (!Directory.Exists(fmlDirectory))
             {
                 Assert.Inconclusive($"Directory not found: {fmlDirectory}. This test requires the FHIR cross-version repository.");
@@ -947,6 +1007,222 @@ namespace fml_tester
                 "Round-trip should preserve header comment");
             Assert.IsTrue(reSerialized.Contains("// Rule comment"), 
                 "Round-trip should preserve rule comment");
+        }
+
+        [TestMethod]
+        public void TestParseBatchIdentityRule()
+        {
+            var fmlText = """
+                map "http://example.org/fhir/StructureMap/test" = test
+
+                group test(source src : Patient, target tgt : Patient) {
+                  src -> tgt : id, name "identityRule";
+                }
+                """;
+
+            var result = FmlParser.Parse(fmlText);
+            Assert.IsInstanceOfType<ParseResult.Success>(result);
+
+            var structureMap = ((ParseResult.Success)result).StructureMap;
+            var rule = structureMap.Groups[0].Rules[0];
+
+            Assert.IsNotNull(rule.IdentityFields, "Batch identity rule should populate IdentityFields");
+            CollectionAssert.AreEqual(new[] { "id", "name" }, rule.IdentityFields);
+            Assert.AreEqual("src", rule.Sources[0].Context);
+            Assert.AreEqual("tgt", rule.Targets[0].Context);
+            Assert.AreEqual("identityRule", rule.Name);
+        }
+
+        [TestMethod]
+        public void TestRoundTripBatchIdentityRule()
+        {
+            var fmlText = """
+                map "http://example.org/fhir/StructureMap/test" = test
+
+                group test(source src : Patient, target tgt : Patient) {
+                  src -> tgt : id, name "identityRule";
+                }
+                """;
+
+            var structureMap = ((ParseResult.Success)FmlParser.Parse(fmlText)).StructureMap;
+            var serialized = FmlSerializer.Serialize(structureMap);
+
+            Assert.IsTrue(serialized.Contains("src -> tgt : id, name"),
+                $"Serialized output should use the batch identity shorthand. Output:\n{serialized}");
+
+            var reParsed = FmlParser.Parse(serialized);
+            Assert.IsInstanceOfType<ParseResult.Success>(reParsed,
+                $"Batch identity serialization should parse. Output:\n{serialized}");
+
+            var reRule = ((ParseResult.Success)reParsed).StructureMap.Groups[0].Rules[0];
+            CollectionAssert.AreEqual(new[] { "id", "name" }, reRule.IdentityFields);
+            Assert.AreEqual("identityRule", reRule.Name);
+        }
+
+        [TestMethod]
+        public void TestSerializeBatchIdentityRuleFromModel()
+        {
+            var structureMap = new FmlStructureMap
+            {
+                MapDeclaration = new MapDeclaration
+                {
+                    Url = "http://example.org/test",
+                    Identifier = "test"
+                },
+                Groups = new List<GroupDeclaration>
+                {
+                    new GroupDeclaration
+                    {
+                        Name = "test",
+                        Parameters = new List<GroupParameter>
+                        {
+                            new GroupParameter { Mode = ParameterMode.Source, Name = "src", Type = "Patient" },
+                            new GroupParameter { Mode = ParameterMode.Target, Name = "tgt", Type = "Patient" }
+                        },
+                        Rules = new List<Rule>
+                        {
+                            new Rule
+                            {
+                                Sources = new List<RuleSource> { new RuleSource { Context = "src" } },
+                                Targets = new List<RuleTarget> { new RuleTarget { Context = "tgt" } },
+                                IdentityFields = new List<string> { "id", "name" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var serialized = FmlSerializer.Serialize(structureMap);
+
+            Assert.IsTrue(serialized.Contains("src -> tgt : id, name;"),
+                $"Serialized output should contain the batch identity shorthand. Output:\n{serialized}");
+
+            var result = FmlParser.Parse(serialized);
+            Assert.IsInstanceOfType<ParseResult.Success>(result,
+                $"Batch identity rule should parse. Output:\n{serialized}");
+        }
+
+        [TestMethod]
+        public void TestParseShareListModeWithId()
+        {
+            var fmlText = """
+                map "http://example.org/fhir/StructureMap/test" = test
+
+                group test(source src : Patient, target tgt : Patient) {
+                  src.name as vName -> tgt.name = vName share sharedId;
+                }
+                """;
+
+            var structureMap = ((ParseResult.Success)FmlParser.Parse(fmlText)).StructureMap;
+            var target = structureMap.Groups[0].Rules[0].Targets[0];
+
+            Assert.AreEqual(TargetListMode.Share, target.ListMode);
+            Assert.AreEqual("sharedId", target.ListRuleId);
+
+            var serialized = FmlSerializer.Serialize(structureMap);
+            Assert.IsTrue(serialized.Contains("share sharedId"),
+                $"Serialized output should preserve the share list-rule id. Output:\n{serialized}");
+        }
+
+        [TestMethod]
+        public void TestRoundTripShareListModeWithQuotedId()
+        {
+            var fmlText = """
+                map "http://example.org/fhir/StructureMap/test" = test
+
+                group test(source src : Patient, target tgt : Patient) {
+                  src.name as vName -> tgt.name = vName share "shared-id";
+                }
+                """;
+
+            var structureMap = ((ParseResult.Success)FmlParser.Parse(fmlText)).StructureMap;
+            var target = structureMap.Groups[0].Rules[0].Targets[0];
+
+            Assert.AreEqual(TargetListMode.Share, target.ListMode);
+            Assert.AreEqual("shared-id", target.ListRuleId);
+
+            var serialized = FmlSerializer.Serialize(structureMap);
+            Assert.IsTrue(serialized.Contains("share \"shared-id\""),
+                $"Serialized output should preserve the quoted share list-rule id. Output:\n{serialized}");
+
+            var reParsed = FmlParser.Parse(serialized);
+            Assert.IsInstanceOfType<ParseResult.Success>(reParsed,
+                $"Quoted share list-rule id should parse. Output:\n{serialized}");
+            Assert.AreEqual("shared-id",
+                ((ParseResult.Success)reParsed).StructureMap.Groups[0].Rules[0].Targets[0].ListRuleId);
+        }
+
+        [TestMethod]
+        public void TestBatchIdentityPreservesHiddenTokens()
+        {
+            var fmlText = """
+                map "http://example.org/fhir/StructureMap/test" = test
+
+                group test(source src : Patient, target tgt : Patient) {
+                  // leading rule comment
+                  src -> tgt : id, name; // inline rule comment
+                }
+                """;
+
+            var structureMap = ((ParseResult.Success)FmlParser.Parse(fmlText)).StructureMap;
+            var rule = structureMap.Groups[0].Rules[0];
+
+            // Hidden tokens are captured on the rule node, identical to simple-copy / markup rules
+            Assert.IsNotNull(rule.LeadingHiddenTokens, "Batch identity rule should capture leading hidden tokens");
+            Assert.IsTrue(rule.LeadingHiddenTokens.Any(t => t.Text.Contains("// leading rule comment")),
+                "Leading hidden tokens should include the comment before the rule");
+            Assert.IsNotNull(rule.TrailingHiddenTokens, "Batch identity rule should capture trailing hidden tokens");
+            Assert.IsTrue(rule.TrailingHiddenTokens.Any(t => t.Text.Contains("// inline rule comment")),
+                "Trailing hidden tokens should include the inline comment after the rule");
+
+            // Comments survive serialization ...
+            var serialized = FmlSerializer.Serialize(structureMap);
+            Assert.IsTrue(serialized.Contains("// leading rule comment"),
+                $"Serialized output should preserve the leading comment. Output:\n{serialized}");
+            Assert.IsTrue(serialized.Contains("// inline rule comment"),
+                $"Serialized output should preserve the inline comment. Output:\n{serialized}");
+
+            // ... and survive a full round-trip
+            var reParsed = FmlParser.Parse(serialized);
+            Assert.IsInstanceOfType<ParseResult.Success>(reParsed,
+                $"Serialized batch identity rule with comments should parse. Output:\n{serialized}");
+            var reSerialized = FmlSerializer.Serialize(((ParseResult.Success)reParsed).StructureMap);
+            Assert.IsTrue(reSerialized.Contains("// leading rule comment") && reSerialized.Contains("// inline rule comment"),
+                $"Round-trip should preserve both comments. Output:\n{reSerialized}");
+        }
+
+        [TestMethod]
+        public void TestShareListModePreservesHiddenTokens()
+        {
+            // A markup rule carries its trailing comment onto the NEXT element's leading
+            // tokens (the ';' lives on the outer mapRule, not on mapTransformationRule),
+            // so a following rule is included to exercise that path consistently.
+            var fmlText = """
+                map "http://example.org/fhir/StructureMap/test" = test
+
+                group test(source src : Patient, target tgt : Patient) {
+                  // rule with shared target
+                  src.name as vName -> tgt.name = vName share "shared-id"; // trailing comment
+                  src.id as vId -> tgt.id = vId;
+                }
+                """;
+
+            var structureMap = ((ParseResult.Success)FmlParser.Parse(fmlText)).StructureMap;
+            var serialized = FmlSerializer.Serialize(structureMap);
+
+            // The share id coexists with the surrounding comment tokens, same as any markup rule
+            Assert.IsTrue(serialized.Contains("// rule with shared target"),
+                $"Leading comment should be preserved. Output:\n{serialized}");
+            Assert.IsTrue(serialized.Contains("share \"shared-id\""),
+                $"Share list-rule id should be preserved. Output:\n{serialized}");
+            Assert.IsTrue(serialized.Contains("// trailing comment"),
+                $"Trailing comment should be preserved. Output:\n{serialized}");
+
+            var reParsed = FmlParser.Parse(serialized);
+            Assert.IsInstanceOfType<ParseResult.Success>(reParsed,
+                $"Serialized share rule with comments should parse. Output:\n{serialized}");
+            Assert.AreEqual("shared-id",
+                ((ParseResult.Success)reParsed).StructureMap.Groups[0].Rules[0].Targets[0].ListRuleId);
         }
 
         /// <summary>

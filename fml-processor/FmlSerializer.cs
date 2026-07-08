@@ -146,10 +146,15 @@ public static class FmlSerializer
                 sb.AppendLine(metadata.Value);
                 sb.Append("\"\"\"");
             }
-            else
+            else if (metadata.ValueKind == MetadataValueKind.String)
             {
                 // Regular value (may need quoting depending on content)
                 SerializeLiteral(sb, metadata.Value);
+            }
+            else
+            {
+                // Boolean, number, date/time literals are emitted bare (unquoted).
+                sb.Append(metadata.Value);
             }
         }
 
@@ -341,6 +346,13 @@ public static class FmlSerializer
         // Output leading hidden tokens (or default indent)
         OutputLeadingHiddenTokens(sb, rule, indent);
 
+        // Batch identity shorthand: source -> target : field1, field2 "name";
+        if (rule.IdentityFields != null)
+        {
+            SerializeBatchIdentityRule(sb, rule);
+            return;
+        }
+
         // Sources
         for (int i = 0; i < rule.Sources.Count; i++)
         {
@@ -380,11 +392,56 @@ public static class FmlSerializer
         }
 
         sb.Append(";");
-        
+
         // Output trailing hidden tokens (inline comments)
         OutputTrailingHiddenTokens(sb, rule);
-        
+
         sb.AppendLine();
+    }
+
+    private static void SerializeBatchIdentityRule(StringBuilder sb, Rule rule)
+    {
+        // source -> target : field1, field2 "name";
+        var source = rule.Sources.FirstOrDefault();
+        if (source != null)
+        {
+            AppendContextElement(sb, source.Context, source.Element);
+        }
+
+        sb.Append(" -> ");
+
+        var target = rule.Targets.FirstOrDefault();
+        if (target != null)
+        {
+            AppendContextElement(sb, target.Context, target.Element);
+        }
+
+        sb.Append(" : ");
+        sb.Append(string.Join(", ", rule.IdentityFields ?? new List<string>()));
+
+        // Optional rule name
+        if (!string.IsNullOrEmpty(rule.Name))
+        {
+            sb.Append(" ");
+            SerializeDoubleQuotedString(sb, rule.Name);
+        }
+
+        sb.Append(";");
+
+        // Output trailing hidden tokens (inline comments)
+        OutputTrailingHiddenTokens(sb, rule);
+
+        sb.AppendLine();
+    }
+
+    private static void AppendContextElement(StringBuilder sb, string context, string? element)
+    {
+        sb.Append(context);
+        if (!string.IsNullOrEmpty(element))
+        {
+            sb.Append('.');
+            sb.Append(element);
+        }
     }
 
     public static void SerializeRuleSource(StringBuilder sb, RuleSource source)
@@ -487,15 +544,11 @@ public static class FmlSerializer
                 sb.Append(target.Variable);
             }
 
-            if (target.ListMode.HasValue)
-            {
-                sb.Append(" ");
-                sb.Append(SerializeTargetListMode(target.ListMode.Value));
-            }
-            
+            AppendTargetListMode(sb, target);
+
             // Output trailing hidden tokens (whitespace/comments after this target)
             OutputTrailingHiddenTokens(sb, target);
-            
+
             return;
         }
 
@@ -513,7 +566,12 @@ public static class FmlSerializer
 
         if (target.Transform != null)
         {
-            sb.Append(" = ");
+            // The '=' assignment form is only valid after a context.element (qualifiedIdentifier).
+            // A context-less target (e.g. 'create('Encounter') as enc') is a bare transform.
+            if (!string.IsNullOrEmpty(target.Context))
+            {
+                sb.Append(" = ");
+            }
             SerializeTransform(sb, target.Transform);
         }
 
@@ -523,14 +581,36 @@ public static class FmlSerializer
             sb.Append(target.Variable);
         }
 
-        if (target.ListMode.HasValue)
-        {
-            sb.Append(" ");
-            sb.Append(SerializeTargetListMode(target.ListMode.Value));
-        }
-        
+        AppendTargetListMode(sb, target);
+
         // Output trailing hidden tokens (whitespace/comments after this target)
         OutputTrailingHiddenTokens(sb, target);
+    }
+
+    private static void AppendTargetListMode(StringBuilder sb, RuleTarget target)
+    {
+        if (!target.ListMode.HasValue)
+        {
+            return;
+        }
+
+        sb.Append(' ');
+        sb.Append(SerializeTargetListMode(target.ListMode.Value));
+
+        // 'share' may carry a list-rule id; emit it bare when it is a valid identifier,
+        // otherwise as a double-quoted string.
+        if (target.ListMode.Value == TargetListMode.Share && !string.IsNullOrEmpty(target.ListRuleId))
+        {
+            sb.Append(' ');
+            if (NeedsQuoting(target.ListRuleId))
+            {
+                SerializeDoubleQuotedString(sb, target.ListRuleId);
+            }
+            else
+            {
+                sb.Append(target.ListRuleId);
+            }
+        }
     }
 
     public static void SerializeTransform(StringBuilder sb, Transform transform)

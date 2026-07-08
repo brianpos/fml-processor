@@ -1275,6 +1275,10 @@ public static class FmlValidatorExtensions
 
     public static SimpleCopyExpression? SimpleCopyExpression(this Rule me)
     {
+        // A batch identity rule (source -> target : field1, field2) is not a simple copy.
+        if (me.IdentityFields != null)
+            return null;
+
         if (me.Sources.Count == 1 && me.Targets.Count == 1)
         {
             var result = new SimpleCopyExpression()

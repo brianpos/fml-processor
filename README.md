@@ -15,3 +15,8 @@ The primary purpose of this project is to create and validate FHIR Mapping Langu
 * Generate from raw StructureDefinitions (not just Gino's ConceptMap format)
 
 ## Remaining work
+
+## Update antlr grammar
+```
+java -cp c:/git/antlr-4.13.1-complete.jar  org.antlr.v4.Tool -Dlanguage=CSharp FmlMapping.g4 -visitor -listener
+```

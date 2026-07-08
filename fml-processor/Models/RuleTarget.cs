@@ -29,6 +29,14 @@ public class RuleTarget : FmlNode
     /// List mode: 'first', 'share', 'last', or 'single' (optional)
     /// </summary>
     public TargetListMode? ListMode { get; set; }
+
+    /// <summary>
+    /// List-rule id used with <see cref="TargetListMode.Share"/>
+    /// (the identifier or quoted string following <c>share</c>).
+    /// Rules sharing the same id are coalesced into one target instance.
+    /// Null when the list mode is not 'share'.
+    /// </summary>
+    public string? ListRuleId { get; set; }
 }
 
 /// <summary>
