@@ -1,6 +1,67 @@
 ﻿using fml_processor;
 using fml_processor.Models;
 
+
+Console.WriteLine("FHIR Mapping Language Validator");
+
+// Handle --help / -h before spinning up the host so it works nicely as a dotnet tool.
+if (args.Any(a => a is "--help" or "-h" or "-?" or "/?"))
+{
+    Console.WriteLine("""
+
+        Usage:
+          fmlgen [options] path
+
+        Options:
+          -i                   Process all maps individually (default: false)
+          -h, --help           Show this help text.
+        """);
+    return;
+}
+
+// Parse the command line arguments into a Settings object
+var settings = new ValidationSettings();
+
+for (int i = 0; i < args.Length; i++)
+{
+    var arg = args[i];
+
+    // Options that require a following value.
+    //if (arg is "-sv" or "-tv" or "-m" or "-c" or "-o")
+    //{
+    //    if (i + 1 >= args.Length)
+    //    {
+    //        Console.Error.WriteLine($"Missing value for option '{arg}'.");
+    //        return;
+    //    }
+
+    //    var value = args[++i];
+    //    switch (arg)
+    //    {
+    //        case "-sv": settings.SourceVersion = value; break;
+    //        case "-tv": settings.TargetVersion = value; break;
+    //        case "-m": settings.PropertyRenamesFile = value; break;
+    //        case "-c": settings.CustomMapsFile = value; break;
+    //        case "-o": settings.OutputDirectory = value; break;
+    //    }
+    //}
+    //else 
+    if (arg is "-i")
+    {
+        settings.ProcessIndividually = true;
+    }
+    else if (arg.StartsWith('-'))
+    {
+        Console.Error.WriteLine($"Unknown option '{arg}'.");
+        return;
+    }
+    else
+    {
+        // The single positional argument is the input path.
+        settings.InputPath = arg;
+    }
+}
+
 // Example 1: Simple FML parsing with result handling
 var simpleFml = """
     map "http://example.org/fhir/StructureMap/tutorial" = tutorial
@@ -23,7 +84,9 @@ switch (result)
 {
     case ParseResult.Success success:
         var map = success.StructureMap;
-        Console.WriteLine($"✅ Successfully parsed FML");
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"Successfully parsed FML");
+        Console.ResetColor();
         Console.WriteLine($"   Map URL: {map.MapDeclaration?.Url}");
         Console.WriteLine($"   Map ID: {map.MapDeclaration?.Identifier}");
         Console.WriteLine($"   Structures: {map.Structures.Count}");
@@ -60,7 +123,9 @@ switch (result)
         break;
         
     case ParseResult.Failure failure:
-        Console.WriteLine($"❌ Parse failed with {failure.Errors.Count} error(s):");
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"Parse failed with {failure.Errors.Count} error(s):");
+        Console.ResetColor();
         foreach (var error in failure.Errors)
         {
             Console.WriteLine($"   {error.Severity} at {error.Location}: {error.Message}");
@@ -74,12 +139,16 @@ Console.WriteLine("\n=== Example 2: Parse FML with Exception Pattern ===\n");
 try
 {
     var map2 = FmlParser.ParseOrThrow(simpleFml);
-    Console.WriteLine($"✅ Successfully parsed using ParseOrThrow");
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.WriteLine($"Successfully parsed using ParseOrThrow");
+    Console.ResetColor();
     Console.WriteLine($"   Groups: {map2.Groups.Count}");
 }
 catch (FmlParseException ex)
 {
-    Console.WriteLine($"❌ Parse failed: {ex.Message}");
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"Parse failed: {ex.Message}");
+    Console.ResetColor();
     foreach (var error in ex.Errors)
     {
         Console.WriteLine($"   {error.Location}: {error.Message}");
@@ -103,11 +172,15 @@ var invalidResult = FmlParser.Parse(invalidFml);
 switch (invalidResult)
 {
     case ParseResult.Success:
-        Console.WriteLine("✅ Unexpectedly parsed invalid FML");
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("Unexpectedly parsed invalid FML");
+        Console.ResetColor();
         break;
         
     case ParseResult.Failure failure:
-        Console.WriteLine($"❌ Parse failed as expected with {failure.Errors.Count} error(s):");
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"Parse failed as expected with {failure.Errors.Count} error(s):");
+        Console.ResetColor();
         foreach (var error in failure.Errors)
         {
             Console.WriteLine($"   [{error.Severity}] {error.Location}: {error.Message}");

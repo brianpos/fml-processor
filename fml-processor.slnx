@@ -1,7 +1,9 @@
 <Solution>
   <Folder Name="/Solution Items/">
+    <File Path="LICENSE.txt" />
     <File Path="README.md" />
   </Folder>
+  <Project Path="fml-generator/fml-generator.csproj" />
   <Project Path="fml-processor/fml-processor.csproj" />
   <Project Path="fml-tester/fml-tester.csproj" />
 </Solution>

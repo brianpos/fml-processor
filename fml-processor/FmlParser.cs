@@ -416,7 +416,7 @@ internal class FmlParserErrorListener : BaseErrorListener
         var location = $"@{line}:{charPositionInLine}";
         
         // Log to console for debugging
-        Console.WriteLine($"Parse Error: {location} {msg}");
+        // Console.WriteLine($"Parse Error: {location} {msg}");
         
         _errors.Add(new ParseError
         {

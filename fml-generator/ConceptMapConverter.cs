@@ -139,6 +139,7 @@ public class ConceptMapConverter
         var pascalCased = string.Concat(words.Select(word => char.ToUpperInvariant(word[0]) + word.Substring(1)));
         return pascalCased;
     }
+
     private GroupDeclaration? ConvertGroupToFml(ConceptMap.GroupComponent group)
     {
         if (string.IsNullOrEmpty(group.Source) || string.IsNullOrEmpty(group.Target))

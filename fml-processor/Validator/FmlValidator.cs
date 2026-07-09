@@ -350,13 +350,13 @@ public class FmlValidator
                 rule.Dependent = new RuleDependent();
                 rule.Dependent.Invocations = new List<GroupInvocation>();
 
-                string sourceName = ConceptMapConverter.ExtractTypeName(sourceV?.Element?.Current?.ElementId ?? sce.Source.Identifier());
-                string targetName = ConceptMapConverter.ExtractTypeName(targetV?.Element?.Current?.ElementId ?? sce.Target.Identifier());
+                string sourceName = ExtractTypeName(sourceV?.Element?.Current?.ElementId ?? sce.Source.Identifier());
+                string targetName = ExtractTypeName(targetV?.Element?.Current?.ElementId ?? sce.Target.Identifier());
 
                 // Create a group name based on the source and target types
-                string groupName = $"{ConceptMapConverter.PascalCase(sourceName)}_To_{ConceptMapConverter.PascalCase(targetName)}";
-                if (ConceptMapConverter.PascalCase(sourceName) == ConceptMapConverter.PascalCase(targetName))
-                    groupName = ConceptMapConverter.PascalCase(sourceName);
+                string groupName = $"{PascalCase(sourceName)}_To_{PascalCase(targetName)}";
+                if (PascalCase(sourceName) == PascalCase(targetName))
+                    groupName = PascalCase(sourceName);
 
                 sce.Source.Variable = "s";
                 sce.Target.Variable = "t";
@@ -833,6 +833,37 @@ public class FmlValidator
             if (sce == null)
                 Console.WriteLine();
         }
+    }
+
+    // Migrated from the ConceptMapConverter class, however is called from a dead code path, so likely unused - will remove when have cleaned up the code further.
+    private static string PascalCase(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        var words = input.Split(new char[] { '_', ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries);
+        var pascalCased = string.Concat(words.Select(word => char.ToUpperInvariant(word[0]) + word.Substring(1)));
+        return pascalCased;
+    }
+
+
+    // This was migrated from the ConceptMapConverter class, it's fine for core types, but doesn't work for profiles
+    // So will need to have access to a resolver to work that out
+    public static string ExtractTypeName(string structureDefinitionUrl)
+    {
+        if (structureDefinitionUrl.StartsWith("http://hl7.org/fhir/StructureDefinition/"))
+        {
+            return structureDefinitionUrl.Substring("http://hl7.org/fhir/StructureDefinition/".Length);
+        }
+
+        // Fallback: try to get the last segment after the last /
+        var lastSlash = structureDefinitionUrl.LastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < structureDefinitionUrl.Length - 1)
+        {
+            return structureDefinitionUrl.Substring(lastSlash + 1);
+        }
+
+        return structureDefinitionUrl;
     }
 
     /// <summary>

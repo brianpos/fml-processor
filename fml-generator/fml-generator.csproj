@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>fml_generator</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+		<PackageId>Hl7.Fhir.MappingLanguage.Generator</PackageId>
+		<Title>HL7 FHIR Mapping Language Generator</Title>
+		<Description>Generate FHIR Mapping Language (FML) for specific use cases, such as FHIR cross version maps.</Description>
+		<PackageTags>FHIR;FML;FHIRMappingLanguage;HL7;generator</PackageTags>
+		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+		<PackageReference Include="Hl7.Fhir.Conformance" Version="5.13.4" />
+		<PackageReference Include="Hl7.Fhir.R5" Version="5.13.4" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+		<None Include="..\LICENSE.txt" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\fml-processor\fml-processor.csproj" />
+	</ItemGroup>
+</Project>
