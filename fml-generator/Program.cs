@@ -16,6 +16,7 @@ if (args.Any(a => a is "--help" or "-h" or "-?" or "/?"))
           -tv <version>        Target FHIR version (default: R4)
           -m <filename.txt>    property renames between the versions
           -c <filename.fml>    custom maps to consider when generating maps
+          -ti <filename.ini>   FHIR.ini file to compare content against
           -o <directory>       Output directory (default: ./output)
           -h, --help           Show this help text.
         """);
@@ -30,7 +31,7 @@ for (int i = 0; i < args.Length; i++)
     var arg = args[i];
 
     // Options that require a following value.
-    if (arg is "-sv" or "-tv" or "-m" or "-c" or "-o")
+    if (arg is "-sv" or "-tv" or "-m" or "-c" or "-o" or "-ti")
     {
         if (i + 1 >= args.Length)
         {
@@ -45,6 +46,7 @@ for (int i = 0; i < args.Length; i++)
             case "-tv": settings.TargetVersion = value; break;
             case "-m": settings.PropertyRenamesFile = value; break;
             case "-c": settings.CustomMapsFile = value; break;
+            case "-ti": settings.TraceFhirIniFile = value; break;
             case "-o": settings.OutputDirectory = value; break;
         }
     }
