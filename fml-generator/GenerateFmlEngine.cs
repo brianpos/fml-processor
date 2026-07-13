@@ -25,6 +25,30 @@ public class GenerateFmlEngine
 
     public IEnumerable<FmlStructureMap> GenerateCrossVersionMaps(bool writeMaps = true, IEnumerable<string> filterTypes = null)
     {
+        LoadStructures();
+
+        // stash the StructureDefinitions loaded to be able to re-use during validation
+        FmlCreator fmlCreator = new FmlCreator();
+        fmlCreator.Source = Source;
+        fmlCreator.Target = Target;
+
+        Console.WriteLine();
+        Console.WriteLine("Structures loaded");
+        Console.WriteLine();
+        var maps = fmlCreator.GenerateMaps(filterTypes);
+        Console.WriteLine("Maps generated");
+        Console.WriteLine();
+        if (writeMaps)
+        {
+            WriteMapsAndReviewNotes(maps);
+            Console.WriteLine("Maps written");
+            Console.WriteLine();
+        }
+        return maps;
+    }
+
+    private void LoadStructures()
+    {
         string sourceFolder = Path.Combine(Path.GetTempPath(), "FML", $"{SourceVersion}-SD");
         if (!Directory.Exists(sourceFolder))
             Directory.CreateDirectory(sourceFolder);
@@ -42,37 +66,17 @@ public class GenerateFmlEngine
             Validator = null
         });
 
-        FmlCreator fmlCreator = new FmlCreator();
-
         // Load Target Structures
         string typesFile = Path.Combine(targetFolder, "profiles-types.json");
-        LoadStructures(ds, fmlCreator.Target, typesFile);
+        LoadStructures(ds, Target, typesFile);
         string resourcesFile = Path.Combine(targetFolder, "profiles-resources.json");
-        LoadStructures(ds, fmlCreator.Target, resourcesFile);
+        LoadStructures(ds, Target, resourcesFile);
 
         // Load Source Structures
         typesFile = Path.Combine(sourceFolder, "profiles-types.json");
-        LoadStructures(ds, fmlCreator.Source, typesFile);
+        LoadStructures(ds, Source, typesFile);
         resourcesFile = Path.Combine(sourceFolder, "profiles-resources.json");
-        LoadStructures(ds, fmlCreator.Source, resourcesFile);
-
-        // stash the StructureDefinitions loaded to be able to re-use during validation
-        Source = fmlCreator.Source;
-        Target = fmlCreator.Target;
-
-        Console.WriteLine();
-        Console.WriteLine("Structures loaded");
-        Console.WriteLine();
-        var maps = fmlCreator.GenerateMaps(filterTypes);
-        Console.WriteLine("Maps generated");
-        Console.WriteLine();
-        if (writeMaps)
-        {
-            WriteMapsAndReviewNotes(maps);
-            Console.WriteLine("Maps written");
-            Console.WriteLine();
-        }
-        return maps;
+        LoadStructures(ds, Source, resourcesFile);
     }
 
     public void WriteMapsAndReviewNotes(List<FmlStructureMap> maps)
@@ -477,11 +481,15 @@ public class GenerateFmlEngine
         }
     }
 
-    public async Task ValidateFml(IEnumerable<FmlStructureMap> fmlMaps, string sourceVer, string targetVer, IEnumerable<string> filterTypes)
+    public async Task ValidateFml(IEnumerable<FmlStructureMap> fmlMaps, IEnumerable<string> filterTypes)
     {
+        // Load in the structures if not already loaded
+        if (!Source.Values.Any())
+            LoadStructures();
+
         // Specific Source and Target FHIR Version StructureDefinition Resolvers
-        IAsyncResourceResolver sourceResolver = GetFhirVersionResolver(sourceVer);
-        IAsyncResourceResolver targetResolver = GetFhirVersionResolver(targetVer);
+        IAsyncResourceResolver sourceResolver = GetFhirVersionResolver(Source.Values, SourceVersion);
+        IAsyncResourceResolver targetResolver = GetFhirVersionResolver(Target.Values, TargetVersion);
         var source = new MultiResolver(sourceResolver, targetResolver);
 
         // Prepare a cache of the TYPE based map groups
@@ -948,36 +956,13 @@ public class GenerateFmlEngine
 
     /// <summary>
     /// </summary>
+    /// <param name="structureDefinitions">A collection of <see cref="StructureDefinition"/> instances to be used for resolving resources (already loaded for the appropriate FHIR version).</param>
     /// <param name="fhirVersion">R4/R4B/R5 - The FHIR version identifier used to determine the resource directory. Cannot be null or empty.</param>
     /// <returns>An <see cref="IAsyncResourceResolver"/> instance that resolves resources for the specified FHIR version.</returns>
-    public IAsyncResourceResolver GetFhirVersionResolver(string fhirVersion)
+    public IAsyncResourceResolver GetFhirVersionResolver(ICollection<StructureDefinition> structureDefinitions, string fhirVersion)
     {
-        var dirSettings = new DirectorySourceSettings(); // { Includes = ["StructureDefinition-*.*"] };
-        dirSettings.ParserSettings.PermissiveParsing = true;
-        dirSettings.ParserSettings.AllowUnrecognizedEnums = true;
-        dirSettings.ParserSettings.AcceptUnknownMembers = true;
-        dirSettings.ParserSettings.ExceptionHandler = (source, args) =>
-        {
-            // System.Diagnostics.Trace.WriteLine($"Parse error: {args.Message}"); 
-        };
-
-        string folder = Path.Combine(Path.GetTempPath(), "FML", $"{fhirVersion}-SD");
-        BaseFhirJsonPocoDeserializer js = new BaseFhirJsonPocoDeserializer(Hl7.Fhir.Model.ModelInfo.ModelInspector, new FhirJsonPocoDeserializerSettings() 
-        {
-            Validator = null,
-            AnnotateLineInfo = false,
-            AnnotateResourceParseExceptions = false,
-            DisableBase64Decoding = true 
-        });
-
-        string jsonTypes = File.ReadAllText(Path.Combine(folder, "profiles-types.json"));
-        js.TryDeserializeResource(jsonTypes, out Resource? bundleTypes, out var issues);
-
-        string jsonResources = File.ReadAllText(Path.Combine(folder, "profiles-resources.json"));
-        js.TryDeserializeResource(jsonResources, out Resource? bundleResources, out issues);
-
         var imr = new InMemoryResourceResolver();
-        var types = (bundleTypes as Bundle).Entry.Select(e => e.Resource).OfType<StructureDefinition>().Select(e =>
+        var types = structureDefinitions.Select(e =>
         {
             if (fhirVersion == "R3")
             {
@@ -1009,11 +994,9 @@ public class GenerateFmlEngine
             return e;
         });
         imr.Add(types);
-        var resources = (bundleResources as Bundle).Entry.Select(e => e.Resource).OfType<StructureDefinition>();
+        var resources = structureDefinitions.OfType<StructureDefinition>();
         imr.Add(resources);
 
-        //var ds = new Hl7.Fhir.Specification.Source.DirectorySource(folder, dirSettings);
-        //ds.Refresh(true);
         string numVersion = fhirVersion switch
         {
             "R3" => "3.0",

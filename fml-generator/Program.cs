@@ -84,6 +84,6 @@ if (settings.TraceFhirIniFile != null)
 
 // Run the validation of the generated content
 Console.WriteLine("\n=== Validating maps ===");
-await engine.ValidateFml(maps, settings.SourceVersion, settings.TargetVersion, settings.FilterTypes);
+await engine.ValidateFml(maps, settings.FilterTypes);
 
 Console.WriteLine("\n=== Done ===");
