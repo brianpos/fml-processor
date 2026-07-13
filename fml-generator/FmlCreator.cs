@@ -388,7 +388,7 @@ public class FmlCreator
 
         ];
 
-    public List<FmlStructureMap> GenerateMaps()
+    public List<FmlStructureMap> GenerateMaps(IEnumerable<string> filterTypes)
     {
         var result = new List<FmlStructureMap>();
 
@@ -398,6 +398,15 @@ public class FmlCreator
             var targetResourceName = sourceR.Key;
             if (targetResourceName == "http://hl7.org/fhir/StructureDefinition/RequestGroup")
                 targetResourceName = "http://hl7.org/fhir/StructureDefinition/RequestOrchestration";
+            if (filterTypes != null && filterTypes.Any() && !filterTypes.Contains(sourceR.Value.Type)
+                && "http://hl7.org/fhir/StructureDefinition/Base" != sourceR.Value.BaseDefinition
+                && "http://hl7.org/fhir/StructureDefinition/Element" != sourceR.Value.BaseDefinition
+                && "http://hl7.org/fhir/StructureDefinition/Quantity" != sourceR.Value.BaseDefinition
+                && "http://hl7.org/fhir/StructureDefinition/BackboneElement" != sourceR.Value.BaseDefinition
+                && "http://hl7.org/fhir/StructureDefinition/uri" != sourceR.Value.BaseDefinition
+                && "http://hl7.org/fhir/StructureDefinition/string" != sourceR.Value.BaseDefinition
+                )
+                continue;
             if (Target.ContainsKey(targetResourceName))
             {
                 FmlStructureMap fml = CreateMap(sourceR.Value, Target[targetResourceName]);

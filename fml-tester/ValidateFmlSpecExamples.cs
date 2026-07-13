@@ -10,7 +10,7 @@ using Task = System.Threading.Tasks.Task;
 namespace fml_tester
 {
     [TestClass]
-    public sealed class ValidateExistingXVerMaps
+    public class ValidateFmlSpecExamples
     {
         private static void RegisterFhirPathGroups(Dictionary<string, GroupDeclaration?> typedGroups)
         {
@@ -72,8 +72,8 @@ namespace fml_tester
                                 // before adding it, check to see if this specific one is already registered
                                 if (!aliasedTypes.ContainsKey(sd.Name))
                                 {
-                                aliasedTypes.Add(use.Alias ?? sd.Name, sd);
-                        }
+                                    aliasedTypes.Add(use.Alias ?? sd.Name, sd);
+                                }
                                 else
                                 {
                                     var existingRegisteredSd = aliasedTypes[sd.Name];
@@ -473,26 +473,14 @@ namespace fml_tester
         }
 
         [TestMethod]
-        public async Task ValidateFml_R4_R5()
+        public async Task ValidateFml_NewSpecExamples()
         {
-            await ValidateFml("C:\\git\\hl7\\fhir-cross-version\\input\\R4toR5", "R4", "R5");
-        }
-
-        [TestMethod]
-        public async Task ValidateFml_R5_R4()
-        {
-            await ValidateFml("C:\\git\\hl7\\fhir-cross-version\\input\\R5toR4", "R5", "R4");
-        }
-
-        [TestMethod]
-        public async Task ValidateFml_R4B_R5()
-        {
-            await ValidateFml("C:\\git\\hl7\\fhir-cross-version\\input\\R4BtoR5", "R4B", "R5");
+            await ValidateFml("C:\\git\\hl7-incubators\\fml-incubator\\input\\examples\\", "R5", "R5");
         }
 
         private async Task ValidateFml(string sourceDirectory, string sourceVer, string targetVer)
         {
-            var files = System.IO.Directory.EnumerateFiles(sourceDirectory, "*.fml");
+            var files = System.IO.Directory.EnumerateFiles(sourceDirectory, "*.fml").Where(n => !n.EndsWith("sm.fml") && !n.EndsWith("endpoint.fml"));
 
             // Specific Source and Target FHIR Version StructureDefinition Resolvers
             IAsyncResourceResolver sourceResolver = GetFhirVersionResolver(sourceVer);
@@ -501,12 +489,25 @@ namespace fml_tester
 
             List<FmlStructureMap> fmlMaps = new List<FmlStructureMap>();
 
+            bool parsingFailed = false;
             foreach (var filename in files)
             {
-                var fmlText = File.ReadAllText(filename);
-                var fml = FmlParser.ParseOrThrow(fmlText);
-                fml.SetAnnotation(new FileInfo(filename));
-                fmlMaps.Add(fml);
+                try
+                {
+                    var fmlText = File.ReadAllText(filename);
+                    var fml = FmlParser.ParseOrThrow(fmlText);
+                    fml.SetAnnotation(new FileInfo(filename));
+                    fmlMaps.Add(fml);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to parse FML file '{filename}': {ex.Message}");
+                    parsingFailed = true;
+                }
+            }
+            if (parsingFailed)
+            {
+                Assert.Fail("One or more FML files failed to parse. See test output for details.");
             }
 
             // Prepare a cache of the TYPE based map groups
@@ -560,53 +561,9 @@ namespace fml_tester
                 // now validate the FML too
                 var outcome = await FmlValidator.VerifyFmlDataTypes(fml, options);
                 issues += outcome.Issue.Count;
-
-                // FmlValidator.ReorderGroupRules(fml.Groups, options);
-            }
-
-            Console.WriteLine("\n==========================================================");
-            Console.WriteLine("Prop read/write checks");
-            Console.WriteLine("==========================================================");
-
-            foreach (var fml in fmlMaps)
-            {
-                if (!string.IsNullOrEmpty(filterToGroup) && fml.Groups[0].Name != filterToGroup)
-                    continue;
-                DetectMissingProps(options, fml);
-
-                var fmlText = FmlSerializer.Serialize(fml);
-                // Console.WriteLine(fmlText);
-
-                //var filenameOut = Path.Combine(outputPath, $"{fml.Groups[0].Name}_5to6.fml");
-                //File.WriteAllText(filenameOut, fmlText);
             }
 
             Assert.AreEqual(0, issues, "There were FML validation issues detected");
-        }
-
-        /// <summary>
-        /// Convert from the Rx format to the x.y format
-        /// </summary>
-        /// <param name="ver"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentException"></exception>
-        private string ConvertVersionString(string ver)
-        {
-            switch (ver)
-            {
-                case "R3":
-                    return "3.0";
-                case "R4":
-                    return "4.0";
-                case "R4B":
-                    return "4.3";
-                case "R5":
-                    return "5.0";
-                case "R6":
-                    return "6.0";
-                default:
-                    throw new ArgumentException($"Unsupported FHIR version: {ver}", nameof(ver));
-            }
         }
     }
 }

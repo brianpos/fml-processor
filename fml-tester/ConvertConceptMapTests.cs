@@ -3,7 +3,6 @@ using fml_processor.Models;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Hl7.Fhir.Specification.Source;
-using Microsoft.Health.Fhir.CodeGen.Tests;
 using Microsoft.Health.Fhir.MappingLanguage;
 using Task = System.Threading.Tasks.Task;
 

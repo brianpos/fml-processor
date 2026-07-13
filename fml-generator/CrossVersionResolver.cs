@@ -4,8 +4,6 @@ using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Utility;
 
 
-namespace Microsoft.Health.Fhir.CodeGen.Tests;
-
 // TODO: @brianpos - there are a lot of similar functions in DefinitionCollectionTx, we should discuss on where we can consolidate
 public static class CanonicalExtensions
 {
@@ -85,7 +83,7 @@ internal class FixedVersionResolver : IAsyncResourceResolver
     }
 }
 
-internal class VersionFilterResolver : IAsyncResourceResolver
+public class VersionFilterResolver : IAsyncResourceResolver
 {
     public VersionFilterResolver(string version, IAsyncResourceResolver source)
     {

@@ -1,0 +1,31 @@
+// --------------------------------------------------------------------------
+// R4 to R6 FML based custom rules
+// (not real maps, but assembled into them along with the renames.txt file)
+// --------------------------------------------------------------------------
+// group name = source_element 
+// is read when the element is encountered in the structure definition 
+// replacing `.` with `_` and removing `[x]` altogether
+// --------------------------------------------------------------------------
+
+group Account_relatedAccount() {
+	// maps to both Account.parent and Account.guarantor.account depending on the value of relatedAccount.relationship
+	Account.relatedAccount as ra then { ra.account -> tgt.parent; ra.account -> tgt.guarantor as g, g.account = ra.account; } "ra";
+}
+
+group Consent_source() {
+	// Source splits into separate properties based on type
+	src.source : Attachment -> tgt.sourceAttachment;
+	src.source : Reference -> tgt.sourceReference;
+}
+
+group ActivityDefinition_dosage() {
+	src where (dosage.exists()) -> tgt.dosageInstruction as di then {
+		// each dosage goes into a new step, and the dosage is mapped to the component of that step
+		src.dosage as sd -> di.step as s, s.component = sd;
+	} "mapDosageInstructions";
+}
+
+group RelatedArtifact_url() {
+	src.url as u where (src.document.empt()) -> tgt.document as d, d.url = u "setUrl";
+	// need to check if this impacts existing document
+}

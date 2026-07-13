@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\fml-generator\fml-generator.csproj" />
     <ProjectReference Include="..\fml-processor\fml-processor.csproj" />
   </ItemGroup>
 

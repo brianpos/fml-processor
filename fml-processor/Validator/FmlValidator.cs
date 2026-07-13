@@ -1237,7 +1237,13 @@ public class FmlValidator
             Severity = severity,
             Details = new CodeableConcept() { Text = message }
         });
+        if (severity == OperationOutcome.IssueSeverity.Error)
+            Console.ForegroundColor = ConsoleColor.Red;
+        if (severity == OperationOutcome.IssueSeverity.Warning)
+            Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine($"\n{severity.GetDocumentation()}: {message}");
+        if (severity == OperationOutcome.IssueSeverity.Error || severity == OperationOutcome.IssueSeverity.Warning)
+            Console.ResetColor();
     }
 
     public static PropertyOrTypeDetails? ResolveIdentifierType(string identifier, Dictionary<string, PropertyOrTypeDetails?> parameterTypesByNameForRule, FmlNode sourceOrTargetNode, List<OperationOutcome.IssueComponent> issues)
