@@ -23,12 +23,31 @@ public class GenerateFmlEngine
     public Dictionary<string, StructureDefinition> Source = new Dictionary<string, StructureDefinition>();
     public Dictionary<string, StructureDefinition> Target = new Dictionary<string, StructureDefinition>();
 
-    public IEnumerable<FmlStructureMap> GenerateCrossVersionMaps(string outputDirectory, IEnumerable<string> filterTypes = null)
+    public IEnumerable<FmlStructureMap> GenerateCrossVersionMaps(string outputDirectory, string? propertyRenamesFile, string? customMapsFile, IEnumerable<string> filterTypes = null)
     {
-        LoadStructures();
+        FmlCreator fmlCreator = new FmlCreator();
+
+        // Load the property renames and custom maps if provided
+        if (!string.IsNullOrEmpty(propertyRenamesFile))
+        {
+            var renamesText = File.ReadAllLines(propertyRenamesFile);
+            if (renamesText?.Any() == true)
+            {
+                fmlCreator.KnownMappings = renamesText
+                    .Select(x => x.Split("//").First())
+                    .Where(x => !string.IsNullOrWhiteSpace(x) 
+                                && !x.StartsWith("#"))
+                    .ToHashSet();
+                if (filterTypes?.Any() == true)
+                {
+                    fmlCreator.KnownMappings = fmlCreator.KnownMappings.Where(x => filterTypes.Any(t => x.StartsWith(t + ".")))
+                        .ToHashSet();
+                }
+            }
+        }
 
         // stash the StructureDefinitions loaded to be able to re-use during validation
-        FmlCreator fmlCreator = new FmlCreator();
+        LoadStructures();
         fmlCreator.Source = Source;
         fmlCreator.Target = Target;
 
@@ -43,6 +62,15 @@ public class GenerateFmlEngine
             WriteMapsAndReviewNotes(maps, outputDirectory);
             Console.WriteLine("Maps written");
             Console.WriteLine();
+        }
+
+        if (fmlCreator.KnownMappings?.Any() == true)
+        {
+            Console.WriteLine("Mappings that weren't detected/used:");
+            foreach (var mapping in fmlCreator.KnownMappings)
+            {
+                Console.WriteLine($"  {mapping}");
+            }
         }
         return maps;
     }

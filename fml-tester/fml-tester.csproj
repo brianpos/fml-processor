@@ -22,4 +22,16 @@
     <ProjectReference Include="..\fml-processor\fml-processor.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="testdata\r4-r6-custom-rules.fml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="testdata\r4-r6-renames.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="testdata\r5-r6-renames.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

@@ -11,21 +11,21 @@ namespace fml_tester
         public void RecreateR5toR6maps()
         {
             var engine = new GenerateFmlEngine("R5", "R6");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R5", "R6"));
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R5", "R6"), Path.Combine("testdata", "r5-r6-renames.txt"), null);
         }
 
         [TestMethod]
         public void RecreateR6toR5maps()
         {
             var engine = new GenerateFmlEngine("R6", "R5");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R6", "R5"));
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R6", "R5"), null, null);
         }
 
         [TestMethod]
         public void RecreateR4toR6maps()
         {
             var engine = new GenerateFmlEngine("R4", "R6");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R6"));
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R6"), Path.Combine("testdata", "r4-r6-renames.txt"), null);
         }
 
 
@@ -33,7 +33,7 @@ namespace fml_tester
         public void RecreateR4toR5maps()
         {
             var engine = new GenerateFmlEngine("R4", "R5");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R5"));
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R5"), null, null);
         }
 
         [TestMethod]
@@ -100,7 +100,7 @@ namespace fml_tester
         public void RecreateR4toR6DiffsForCoreSpec()
         {
             var engine = new GenerateFmlEngine("R4", "R6");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R6"));
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R6"), Path.Combine("testdata", "r4-r6-renames.txt"), null);
             Console.WriteLine("[r4-r6-changes]");
             var existingMaps = engine.ReadSection(@"c:/git/hl7/fhir-core-build/source/fhir.ini", "r4-r6-changes");
             engine.TraceIniContentForMaps(maps, existingMaps);
@@ -118,7 +118,7 @@ namespace fml_tester
         public void RecreateR4BtoR6DiffsForCoreSpec()
         {
             var engine = new GenerateFmlEngine("R4B", "R6");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4B", "R6"));
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4B", "R6"), null, null);
             Console.WriteLine("[r4-r6-changes]");
             var existingMaps = engine.ReadSection(@"c:/git/hl7/fhir-core-build/source/fhir.ini", "r4-r6-changes");
             engine.TraceIniContentForMaps(maps, existingMaps);
@@ -128,7 +128,7 @@ namespace fml_tester
         public void RecreateR5toR6DiffsForCoreSpec()
         {
             var engine = new GenerateFmlEngine("R5", "R6");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R5", "R6"));
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R5", "R6"), Path.Combine("testdata", "r5-r6-renames.txt"), null);
             Console.WriteLine("[r5-r6-changes]");
             var existingMaps = engine.ReadSection(@"c:/git/hl7/fhir-core-build/source/fhir.ini", "r5-r6-changes");
             engine.TraceIniContentForMaps(maps, existingMaps);
