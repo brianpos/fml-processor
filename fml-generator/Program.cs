@@ -70,7 +70,7 @@ if (settings.TargetVersion == null)
 
 // Run the generation routine
 var engine = new GenerateFmlEngine(settings.SourceVersion, settings.TargetVersion);
-var maps = engine.GenerateCrossVersionMaps(true, settings.FilterTypes);
+var maps = engine.GenerateCrossVersionMaps(settings.OutputDirectory, settings.FilterTypes);
 
 // check the ini file if provided
 if (settings.TraceFhirIniFile != null)

@@ -23,7 +23,7 @@ public class GenerateFmlEngine
     public Dictionary<string, StructureDefinition> Source = new Dictionary<string, StructureDefinition>();
     public Dictionary<string, StructureDefinition> Target = new Dictionary<string, StructureDefinition>();
 
-    public IEnumerable<FmlStructureMap> GenerateCrossVersionMaps(bool writeMaps = true, IEnumerable<string> filterTypes = null)
+    public IEnumerable<FmlStructureMap> GenerateCrossVersionMaps(string outputDirectory, IEnumerable<string> filterTypes = null)
     {
         LoadStructures();
 
@@ -38,9 +38,9 @@ public class GenerateFmlEngine
         var maps = fmlCreator.GenerateMaps(filterTypes);
         Console.WriteLine("Maps generated");
         Console.WriteLine();
-        if (writeMaps)
+        if (!string.IsNullOrEmpty(outputDirectory))
         {
-            WriteMapsAndReviewNotes(maps);
+            WriteMapsAndReviewNotes(maps, outputDirectory);
             Console.WriteLine("Maps written");
             Console.WriteLine();
         }
@@ -79,13 +79,12 @@ public class GenerateFmlEngine
         LoadStructures(ds, Source, resourcesFile);
     }
 
-    public void WriteMapsAndReviewNotes(List<FmlStructureMap> maps)
+    public void WriteMapsAndReviewNotes(List<FmlStructureMap> maps, string outputFolder)
     {
-
         // Write all the maps to the output folder
-        string outputFolder = Path.Combine("c:", "temp", "fhir-cross-version-source",
-            $"{SourceVersion}_{TargetVersion}",
-            "maps", "StructureMaps");
+        // string outputFolder = Path.Combine("c:", "temp", "fhir-cross-version-source",
+        //    $"{SourceVersion}_{TargetVersion}",
+        //    "maps", "StructureMaps");
         if (!Directory.Exists(outputFolder))
             Directory.CreateDirectory(outputFolder);
 
