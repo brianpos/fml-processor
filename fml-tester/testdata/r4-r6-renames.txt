@@ -5,6 +5,7 @@
 // ignore empty lines
 // ignore c-style line comments (no block comments)
 // trim whitespace afterwards
+// any line comments after a mapping will be appended to the rule in the generated map
 // --------------------------------------------------------------------------
 
 SampledData.period -> SampledData.interval
@@ -13,7 +14,7 @@ Appointment.cancelationReason -> Appointment.cancellationReason
 Appointment.reasonCode -> Appointment.reason
 Appointment.reasonReference -> Appointment.reason
 Appointment.comment -> Appointment.note
-Account.partOf -> Account.parent
+Account.partOf -> Account.parent // though there may be cases where this needs to map into the guarantor.account property (R5/R6 extensions will need to drive this part)
 
 AuditEvent.period -> AuditEvent.occurred
 
@@ -149,6 +150,10 @@ ImplementationGuide.manifest.resource.example -> ImplementationGuide.manifest.re
 
 Location.telecom -> Location.contact
 Location.physicalType -> Location.form
+Location.hoursOfOperation -> Location.hoursOfOperation.availableTime
+Location.hoursOfOperation.openingTime -> Location.hoursOfOperation.availableTime.availableStartTime
+Location.hoursOfOperation.closingTime -> Location.hoursOfOperation.availableTime.availableEndTime
+Location.availabilityExceptions -> Location.hoursOfOperation.notAvailableTime.description
 
 Medication.form -> Medication.doseForm
 Medication.manufacturer -> Medication.marketingAuthorizationHolder

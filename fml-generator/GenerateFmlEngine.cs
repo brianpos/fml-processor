@@ -46,6 +46,20 @@ public class GenerateFmlEngine
             }
         }
 
+        // Load the custom rules for overloads
+        if (!string.IsNullOrEmpty(customMapsFile))
+        {
+            var customMapsText = File.ReadAllText(customMapsFile);
+            if (!string.IsNullOrWhiteSpace(customMapsText))
+            {
+                ParseResult parseResult = FmlParser.Parse(customMapsText);
+                if (parseResult is ParseResult.Success success)
+                {
+                    fmlCreator.SetCustomRules(success.StructureMap.Groups);
+                }
+            }
+        }
+
         // stash the StructureDefinitions loaded to be able to re-use during validation
         LoadStructures();
         fmlCreator.Source = Source;

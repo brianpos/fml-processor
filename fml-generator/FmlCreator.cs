@@ -1,11 +1,8 @@
-using Antlr4.Runtime.Dfa;
 using fml_processor.Models;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Utility;
 using Hl7.FhirPath.Sprache;
-using Microsoft.Health.Fhir.MappingLanguage;
-using System.Collections.Specialized;
-using System.Security.AccessControl;
+using System.Text;
 
 namespace fml_processor;
 
@@ -137,6 +134,12 @@ public class FmlCreator
         if (group.Extends != null)
             group.TypeMode = GroupTypeMode.TypePlus;
 
+        var customRuleKey = GetCustomRuleName(group);
+        if (_customRules.ContainsKey(customRuleKey))
+        {
+            group.SetAnnotation(_customRules[customRuleKey]);
+        }
+
         // for now just do a simple copy of all matching elements by name
         var missedSourceElements = new List<ElementDefinition>();
         var missedTargetElements = targetSd.Differential.Element.Skip(1).ToList();
@@ -243,6 +246,12 @@ public class FmlCreator
                             Name = "tgt"
                         });
 
+                        customRuleKey = GetCustomRuleName(groupBackbone);
+                        if (_customRules.ContainsKey(customRuleKey))
+                        {
+                            groupBackbone.SetAnnotation(_customRules[customRuleKey]);
+                        }
+
                         // always display cardinality for groups
                         displayCardinality = true;
 
@@ -283,6 +292,7 @@ public class FmlCreator
                         if (!AreTypesCompatible(sourceTypes, targetTypes))
                         {
                             mappingWarningMessage = (mappingWarningMessage != null ? mappingWarningMessage + "    " : " // Warning: ") + $"Source Type unsupported: {InCompatibleTypes(sourceTypes, targetTypes)}  ({sourceTypes} -> {targetTypes})";
+                            CloneRuleForTypes(groupStack.Peek().Rules, rule, sourceTypes, targetTypes, matchingTe);
                         }
                         if (!AreTypesCompatible(sourceTargetProfiles, targetTargetProfiles) && targetTargetProfiles.Any()) // no target profile means ANY
                         {
@@ -400,6 +410,68 @@ public class FmlCreator
         }
 
         return fml;
+    }
+
+    private void CloneRuleForTypes(List<Rule> rules, Rule rule, string sourceTypes, string targetTypes, ElementDefinition matchingTe)
+    {
+        var sb = new StringBuilder();
+        FmlSerializer.SerializeRule(sb, rule, 1);
+        var ruleString = sb.ToString();
+
+        rule.LeadingHiddenTokens ??= new List<HiddenToken>();
+        rule.LeadingHiddenTokens.Add(new HiddenToken()
+        {
+            TokenType = FmlMappingLexer.LINE_COMMENT,
+            Text = $"// rule changed to {sourceTypes} -> {targetTypes}\n// "
+        });
+
+        // clone the rule for each type
+        var sourceTypeList = sourceTypes.Split(',').Select(t => t.Trim()).Where(t => !String.IsNullOrEmpty(t)).ToHashSet();
+        var targetTypeList = targetTypes.Split(',').Select(t => t.Trim()).Where(t => !String.IsNullOrEmpty(t)).ToHashSet();
+
+        foreach (var sourceType in sourceTypeList)
+        {
+            if (targetTypeList.Contains(sourceType))
+            {
+                // this is a direct mapping, can use it
+                sourceTypeList.Remove(sourceType);
+                targetTypeList.Remove(sourceType);
+
+                var typedRule = FmlParser.ParseRule(ruleString);
+                typedRule.Sources[0].Type = sourceType;
+                rules.Add(typedRule);
+            }
+            else
+            {
+                // remove any compatible pairs from the source/target lists
+                foreach (var pair in compatiblePairs.Where(p => p.Item1 == sourceType))
+                {
+                    if (targetTypeList.Contains(pair.Item2))
+                    {
+                        sourceTypeList.Remove(pair.Item1);
+                        targetTypeList.Remove(pair.Item2);
+
+                        var typedRule = FmlParser.ParseRule(ruleString);
+                        typedRule.Sources[0].Type = pair.Item1;
+                        rules.Add(typedRule);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Now grab these ones from the xversion extension
+        var incompatibleTypes = sourceTypeList.Except(targetTypeList);
+        foreach (var sourceType in incompatibleTypes)
+        {
+            var typedRule = FmlParser.ParseRule(ruleString);
+            typedRule.Name = $"xver{PascalCase(typedRule.Sources[0].Element)}{PascalCase(sourceType)}";
+            typedRule.Sources[0].Element = "extension";
+            typedRule.Sources[0].Variable = "e";
+            typedRule.Sources[0].Condition = $"url = 'http://hl7.org/fhir/6.0/StructureDefinition/extension-{matchingTe.Path}'";
+            typedRule.Targets[0].Transform = new Transform() { Type = "evaluate", Parameters = [ new TransformParameter() { Value = "e.value", Type = TransformParameterType.Expression }] };
+            rules.Add(typedRule);
+        }
     }
 
     /// <summary>
@@ -852,5 +924,35 @@ public class FmlCreator
         }
 
         return path.Substring(lastDotIndex + 1);
+    }
+
+    Dictionary<string, GroupDeclaration> _customRules = new Dictionary<string, GroupDeclaration>();
+
+    string GetCustomRuleName(GroupDeclaration group)
+    {
+        var sb = new StringBuilder();
+        sb.Append(group.Name);
+
+        // Parameters
+        sb.Append("(");
+        for (int i = 0; i < group.Parameters.Count; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(", ");
+            }
+            FmlSerializer.SerializeGroupParameter(sb, group.Parameters[i]);
+        }
+        sb.Append(")");
+        return sb.ToString();
+    }
+
+    internal void SetCustomRules(List<GroupDeclaration> groups)
+    {
+        _customRules = new Dictionary<string, GroupDeclaration>();
+        foreach (var group in groups)
+        {
+            _customRules[GetCustomRuleName(group)] = group;
+        }
     }
 }

@@ -2,30 +2,224 @@
 // R4 to R6 FML based custom rules
 // (not real maps, but assembled into them along with the renames.txt file)
 // --------------------------------------------------------------------------
-// group name = source_element 
-// is read when the element is encountered in the structure definition 
-// replacing `.` with `_` and removing `[x]` altogether
+// Any groups in this file will "override" the same group in any generated map,
+// replacing rules with a matching source, and then any left over in the group 
+// appended to the end of the generated group.
+// This means if you replace a property, you have to completely replace it,
+// and if you add a property, you can just add it to the end of the group.
+// Comments for the group will be added to the generated group.
 // --------------------------------------------------------------------------
 
-group Account_relatedAccount() {
+group Element(source src : ElementR4, target tgt : ElementR6) {
+  src.extension where (url.startsWith('http://hl7.org/fhir/5.0/StructureDefinition/extension-').not()) -> tgt.extension;
+}
+
+group BackboneElement(source src : BackboneElementR4, target tgt : BackboneElementR6) {
+  src.modifierExtension where (url.startsWith('http://hl7.org/fhir/5.0/StructureDefinition/extension-').not()) -> tgt.modifierExtension;
+}
+
+/*
+group Account(source src : AccountR4, target tgt : AccountR6) {
 	// maps to both Account.parent and Account.guarantor.account depending on the value of relatedAccount.relationship
-	Account.relatedAccount as ra then { ra.account -> tgt.parent; ra.account -> tgt.guarantor as g, g.account = ra.account; } "ra";
+	src.relatedAccount as ra then {
+		ra.account -> tgt.parent;
+		ra.account -> tgt.guarantor as g, g.account = ra.account;
+	} "ra";
 }
+*/
 
-group Consent_source() {
-	// Source splits into separate properties based on type
-	src.source : Attachment -> tgt.sourceAttachment;
-	src.source : Reference -> tgt.sourceReference;
-}
+group ActivityDefinition(source src : ActivityDefinitionR4, target tgt : ActivityDefinitionR6) {
+	src.dosage; // custom rule below
 
-group ActivityDefinition_dosage() {
 	src where (dosage.exists()) -> tgt.dosageInstruction as di then {
 		// each dosage goes into a new step, and the dosage is mapped to the component of that step
 		src.dosage as sd -> di.step as s, s.component = sd;
 	} "mapDosageInstructions";
 }
 
-group RelatedArtifact_url() {
-	src.url as u where (src.document.empt()) -> tgt.document as d, d.url = u "setUrl";
+group AuditEventSource(source src, target tgt) {
+  src.site as s -> tgt.site as t, t.reference = s;
+}
+
+
+group BundleEntry(source src, target tgt) {
+  src.link as s /* [0..*] */ -> tgt.link as t /* [0..*] */ then BundleLink(s, t); // TODO: Make the engine handle this - is just a content reference on both sides, but the content reference rule should apply
+}
+
+
+group CapabilityStatementRest(source src, target tgt) {
+  src.searchParam as s /* [0..*] */ -> tgt.searchParam as t /* [0..*] */ then CapabilityStatementRestResourceSearchParam(s, t);
+  src.operation as s /* [0..*] */ -> tgt.operation as t /* [0..*] */ then CapabilityStatementRestResourceOperation(s, t);
+}
+
+
+group ClaimResponse(source src : ClaimResponseR4, target tgt : ClaimResponseR6) extends DomainResource <<type+>> {
+  src.adjudication as s -> tgt.adjudication as t then ClaimResponseItemAdjudication(s, t);
+}
+
+group ClaimResponseItemDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ClaimResponseItemAdjudication(s, t);
+}
+
+group ClaimResponseItemDetailSubDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ClaimResponseItemAdjudication(s, t);
+}
+
+group ClaimResponseAddItem(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ClaimResponseItemAdjudication(s, t);
+}
+
+group ClaimResponseAddItemDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ClaimResponseItemAdjudication(s, t);
+}
+
+group ClaimResponseAddItemDetailSubDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ClaimResponseItemAdjudication(s, t);
+}
+
+
+group CodeSystemConcept(source src, target tgt) {
+  src.concept as s -> tgt.concept as t then CodeSystemConcept(s, t);
+}
+
+
+group CompositionSection(source src, target tgt) {
+  src.section as s -> tgt.section as t then CompositionSection(s, t);
+}
+
+
+group ConceptMapGroupElementTarget(source src, target tgt) {
+  src.product as s -> tgt.product as t then ConceptMapGroupElementTargetDependsOn(s, t);
+}
+
+
+group ConsentProvision(source src, target tgt) {
+  src.provision as s -> tgt.provision as t then ConsentProvision(s, t);
+}
+
+group Coverage(source src : CoverageR4, target tgt : CoverageR6) {
+  src.network as s -> tgt.network as t, t.display = s "setNetwork"; // may need to clarigy this one, is it actually an identifier and not the discription, and thus should go in the identifier slot?
+}
+
+
+group DeviceDefinition(source src : DeviceDefinitionR4, target tgt : DeviceDefinitionR6) {
+  src.manufacturer : Reference -> tgt.manufacturer;
+  src.manufacturer : string as s -> tgt.manufacturer as t, t.display = s "setManufacturer";
+}
+
+
+group ExampleScenarioProcessStep(source src, target tgt) {
+  src.process as s /* [0..*] */ -> tgt.process as t /* [0..1] */ then ExampleScenarioProcess(s, t); // Warning: source repeating, target single-valued
+}
+
+group ExampleScenarioProcessStepOperation(source src, target tgt) {
+  src.request as s -> tgt.request as t then ExampleScenarioInstanceContainedInstance(s, t);
+  src.response as s -> tgt.response as t then ExampleScenarioInstanceContainedInstance(s, t);
+}
+
+group ExampleScenarioProcessStepAlternative(source src, target tgt) {
+  src.step as s -> tgt.step as t then ExampleScenarioProcessStep(s, t);
+}
+
+
+group ExplanationOfBenefit(source src : ExplanationOfBenefitR4, target tgt : ExplanationOfBenefitR6) {
+  src.adjudication as s -> tgt.adjudication as t then ExplanationOfBenefitItemAdjudication(s, t);
+}
+
+group ExplanationOfBenefitItemDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ExplanationOfBenefitItemAdjudication(s, t);
+}
+
+group ExplanationOfBenefitItemDetailSubDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ExplanationOfBenefitItemAdjudication(s, t);
+}
+
+group ExplanationOfBenefitAddItem(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ExplanationOfBenefitItemAdjudication(s, t);
+}
+
+group ExplanationOfBenefitAddItemDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ExplanationOfBenefitItemAdjudication(s, t);
+}
+
+group ExplanationOfBenefitAddItemDetailSubDetail(source src, target tgt) {
+  src.adjudication as s -> tgt.adjudication as t then ExplanationOfBenefitItemAdjudication(s, t);
+}
+
+
+group ImplementationGuideDefinitionPage(source src, target tgt) {
+  src.page as s -> tgt.page as t then ImplementationGuideDefinitionPage(s, t);
+}
+
+
+group ObservationComponent(source src, target tgt) {
+  src.referenceRange as s -> tgt.referenceRange as t then ObservationReferenceRange(s, t);
+}
+
+
+group OperationDefinitionParameter(source src, target tgt) {
+  src.part as s -> tgt.part as t then OperationDefinitionParameter(s, t);
+}
+
+
+group ParametersParameter(source src, target tgt) {
+  src.part as s -> tgt.part as t then ParametersParameter(s, t);
+}
+
+
+group PlanDefinitionAction(source src, target tgt) {
+  src.action as s -> tgt.action as t then PlanDefinitionAction(s, t);
+}
+
+
+group ProvenanceEntity(source src, target tgt) {
+  src.agent as s -> tgt.agent as t then ProvenanceAgent(s, t);
+}
+
+
+group QuestionnaireItem(source src, target tgt) extends BackboneElement {
+  src.item as s -> tgt.item as t then QuestionnaireItem(s, t);
+}
+
+
+group QuestionnaireResponseItem(source src, target tgt) {
+  src.item as s -> tgt.item as t then QuestionnaireResponseItem(s, t);
+}
+
+
+group QuestionnaireResponseItemAnswer(source src, target tgt) {
+  src.item as s -> tgt.item as t then QuestionnaireResponseItem(s, t);
+}
+
+
+group RelatedArtifact(source src : RelatedArtifactR4, target tgt : RelatedArtifactR6) {
+	src.url as u where (src.document.empty()) -> tgt.document as d, d.url = u "setUrl";
 	// need to check if this impacts existing document
 }
+
+
+group RequestGroupAction(source src, target tgt) {
+  src.action as s -> tgt.action as t then RequestGroupAction(s, t); // renamed
+}
+
+
+group ValueSetCompose(source src, target tgt) {
+  src.exclude as s -> tgt.exclude as t then ValueSetComposeInclude(s, t);
+}
+
+group ValueSetExpansionContains(source src, target tgt) {
+  src.designation as s -> tgt.designation as t then ValueSetComposeIncludeConceptDesignation(s, t);
+  src.contains as s -> tgt.contains as t then ValueSetExpansionContains(s, t);
+}
+
+
+// Custom handling of the availability props
+group Location(source src : LocationR4, target tgt : LocationR6) {
+  src.hoursOfOperation;       // custom rule below
+  src.availabilityExceptions; // custom rule below
+
+  src where (%hoursOfOperation.exists() or %availabilityExceptions.exists()) -> tgt.hoursOfOperation as ho then {
+	src.hoursOfOperation as h -> ho;
+  } "mapHoursOfOperation";
+}
+
