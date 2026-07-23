@@ -179,7 +179,7 @@ namespace fml_tester
                   src.name as vName where (use = 'official') -> tgt.entry.name = vName;
                   src.identifier : Identifier as id -> tgt.id = create('Identifier') as newId then {
                     id.value -> newId.value;
-                    id.system -> newId.system;
+                    id.system as e -> newId.system = (e.substring(0,4));
                   };
                 }
                 """;

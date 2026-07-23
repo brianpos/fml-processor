@@ -199,6 +199,35 @@ public static class FmlParser
         });
     }
 
+    /// <summary>
+    /// Parses a sequence of standalone group declarations (as used by the custom-rules
+    /// files that are fragments assembled into generated maps rather than complete
+    /// StructureMaps with a <c>map</c>/<c>uses</c> header).
+    /// </summary>
+    public static IEnumerable<GroupDeclaration> ParseGroups(string groupText)
+    {
+        return ParseMany<GroupDeclaration>(groupText, (parser) =>
+        {
+            var groupContexts = new List<IParseTree>();
+
+            // Parse group declarations in sequence until the end of the input is reached.
+            while (parser.TokenStream.LA(1) != FmlMappingParser.Eof)
+            {
+                int positionBefore = parser.TokenStream.Index;
+                groupContexts.Add(parser.groupDeclaration());
+
+                // Guard against making no progress (e.g. an unrecoverable parse
+                // error that does not consume any tokens) to avoid an infinite loop.
+                if (parser.TokenStream.Index == positionBefore)
+                {
+                    break;
+                }
+            }
+
+            return groupContexts;
+        });
+    }
+
     public static T Parse<T>(string fshText, Func<FmlMappingParser, IParseTree> parseNode)
         where T : FmlNode
     {

@@ -5,6 +5,7 @@
 // ignore empty lines
 // ignore c-style line comments (no block comments)
 // trim whitespace afterwards
+// any line comments after a mapping will be appended to the rule in the generated map
 // --------------------------------------------------------------------------
 
 SampledData.period -> SampledData.interval

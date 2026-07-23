@@ -1,0 +1,71 @@
+// --------------------------------------------------------------------------
+// R5 to R6 FML based custom rules
+// (not real maps, but assembled into them along with the renames.txt file)
+// --------------------------------------------------------------------------
+// Any groups in this file will "override" the same group in any generated map,
+// replacing rules with a matching source, and then any left over in the group 
+// appended to the end of the generated group.
+// This means if you replace a property, you have to completely replace it,
+// and if you add a property, you can just add it to the end of the group.
+// Comments for the group will be added to the generated group.
+// --------------------------------------------------------------------------
+
+group Account(source src : AccountR4, target tgt : AccountR6) {
+	// maps to both Account.parent and Account.guarantor.account depending on the value of relatedAccount.relationship
+	src.relatedAccount as ra then {
+		ra.account -> tgt.parent;
+		ra.account -> tgt.guarantor as g, g.account = ra.account;
+	} "ra";
+}
+
+group ActivityDefinition(source src : ActivityDefinitionR4, target tgt : ActivityDefinitionR6) {
+	src.dosage; // custom rule below
+
+	src where (dosage.exists()) -> tgt.dosageInstruction as di then {
+		// each dosage goes into a new step, and the dosage is mapped to the component of that step
+		src.dosage as sd -> di.step as s, s.component = sd;
+	} "mapDosageInstructions";
+}
+
+group RelatedArtifact(source src : RelatedArtifactR4, target tgt : RelatedArtifactR6) {
+	src.url as u where (src.document.empty()) -> tgt.document as d, d.url = u "setUrl";
+	// need to check if this impacts existing document
+}
+
+
+
+group Element(source src : ElementR4, target tgt : ElementR6) {
+  src.extension where (url.startsWith('http://hl7.org/fhir/5.0/StructureDefinition/extension-').not()) -> tgt.extension;
+}
+
+group BackboneElement(source src : BackboneElementR4, target tgt : BackboneElementR6) extends Element <<type+>> {
+  src.modifierExtension where (url.startsWith('http://hl7.org/fhir/5.0/StructureDefinition/extension-').not()) -> tgt.modifierExtension;
+}
+
+
+// Custom handling of the availability props
+group Location(source src : LocationR4, target tgt : LocationR6) {
+  src.hoursOfOperation;       // custom rule below
+  src.availabilityExceptions; // custom rule below
+
+  src where (%hoursOfOperation.exists() or %availabilityExceptions.exists()) -> tgt.hoursOfOperation as ho then {
+	src.hoursOfOperation as h -> ho;
+  } "mapHoursOfOperation";
+}
+
+
+group QuestionnaireItem(source src, target tgt) extends BackboneElement {
+  src.item as s -> tgt.item as t then QuestionnaireItem(s, t);
+}
+
+
+group QuestionnaireResponseItem(source src, target tgt) {
+  src.item as s -> tgt.item as t then QuestionnaireResponseItem(s, t);
+}
+
+
+group QuestionnaireResponseItemAnswer(source src, target tgt) {
+  src.item as s -> tgt.item as t then QuestionnaireResponseItem(s, t);
+}
+
+

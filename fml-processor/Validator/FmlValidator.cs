@@ -655,7 +655,7 @@ public class FmlValidator
                                         // this is a fhirpath expression, we need to return the expected type of the expression
                                         // not sure what we should do if there can be more than 1 type here...
                                         var expressionParameter = target.Transform.Parameters.FirstOrDefault();
-                                        Console.Error.WriteLine($"{expressionParameter.Value}");
+                                        Console.Error.WriteLine($"FHIRPath Expression to check return type: {expressionParameter.Value}");
                                         break;
 
                                     case "uuid":

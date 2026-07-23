@@ -25,7 +25,7 @@ public class GenerateFmlEngine
 
     public IEnumerable<FmlStructureMap> GenerateCrossVersionMaps(string outputDirectory, string? propertyRenamesFile, string? customMapsFile, IEnumerable<string> filterTypes = null)
     {
-        FmlCreator fmlCreator = new FmlCreator();
+        MapGenerator fmlCreator = new MapGenerator();
 
         // Load the property renames and custom maps if provided
         if (!string.IsNullOrEmpty(propertyRenamesFile))
@@ -34,7 +34,7 @@ public class GenerateFmlEngine
             if (renamesText?.Any() == true)
             {
                 fmlCreator.KnownMappings = renamesText
-                    .Select(x => x.Split("//").First())
+                    .Select(x => x.Split("//").First().Trim())
                     .Where(x => !string.IsNullOrWhiteSpace(x) 
                                 && !x.StartsWith("#"))
                     .ToHashSet();
@@ -46,16 +46,27 @@ public class GenerateFmlEngine
             }
         }
 
-        // Load the custom rules for overloads
+        // Load the custom rules for overloads. These files are fragments (a set of group
+        // declarations that get assembled into the generated maps) rather than complete
+        // StructureMaps with a map/uses header, so parse them as standalone groups.
         if (!string.IsNullOrEmpty(customMapsFile))
         {
             var customMapsText = File.ReadAllText(customMapsFile);
             if (!string.IsNullOrWhiteSpace(customMapsText))
             {
-                ParseResult parseResult = FmlParser.Parse(customMapsText);
-                if (parseResult is ParseResult.Success success)
+                try
                 {
-                    fmlCreator.SetCustomRules(success.StructureMap.Groups);
+                    var customGroups = FmlParser.ParseGroups(customMapsText).ToList();
+                    if (customGroups.Count > 0)
+                        fmlCreator.SetCustomRules(customGroups);
+                }
+                catch (FmlParseException ex)
+                {
+                    Console.WriteLine("Error parsing custom maps file:");
+                    foreach (var error in ex.Errors)
+                    {
+                        Console.WriteLine($"  {error.Code}: {error.Message} {error.Location}");
+                    }
                 }
             }
         }
@@ -64,6 +75,11 @@ public class GenerateFmlEngine
         LoadStructures();
         fmlCreator.Source = Source;
         fmlCreator.Target = Target;
+
+        // Provide the source/target resolvers so the creator can walk the StructureDefinitions
+        // using the StructureDefinitionWalker (as is done in the FmlValidator).
+        fmlCreator.SourceResolver = GetFhirVersionResolver(Source.Values, SourceVersion);
+        fmlCreator.TargetResolver = GetFhirVersionResolver(Target.Values, TargetVersion);
 
         Console.WriteLine();
         Console.WriteLine("Structures loaded");

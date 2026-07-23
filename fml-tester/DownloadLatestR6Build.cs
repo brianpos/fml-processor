@@ -86,7 +86,7 @@ namespace fml_tester
         [TestMethod]
         public async Task DownloadR6StructureDefinitions()
         {
-            await DownloadStructureDefinitionsAndExamples("https://build.fhir.org/", "R6");
+            await DownloadStructureDefinitionsAndExamples("https://hl7.org/fhir/6.0.0-ballot5/", "R6");
         }
 
         public void ExtractStructureDefinitions()

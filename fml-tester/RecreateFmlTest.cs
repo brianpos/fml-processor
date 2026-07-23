@@ -11,7 +11,7 @@ namespace fml_tester
         public void RecreateR5toR6maps()
         {
             var engine = new GenerateFmlEngine("R5", "R6");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R5", "R6"), Path.Combine("testdata", "r5-r6-renames.txt"), null);
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R5", "R6"), Path.Combine("testdata", "r5-r6-renames.txt"), Path.Combine("testdata", "r5-r6-custom-rules.fml"));
         }
 
         [TestMethod]
@@ -25,7 +25,7 @@ namespace fml_tester
         public void RecreateR4toR6maps()
         {
             var engine = new GenerateFmlEngine("R4", "R6");
-            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R6"), Path.Combine("testdata", "r4-r6-renames.txt"), null);
+            var maps = engine.GenerateCrossVersionMaps(OutputPath("R4", "R6"), Path.Combine("testdata", "r4-r6-renames.txt"), Path.Combine("testdata", "r4-r6-custom-rules.fml"));
         }
 
 

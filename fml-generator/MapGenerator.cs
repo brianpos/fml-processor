@@ -1,7 +1,10 @@
 using fml_processor.Models;
 using Hl7.Fhir.Model;
+using Hl7.Fhir.Specification.Navigation;
+using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Utility;
 using Hl7.FhirPath.Sprache;
+using Microsoft.Health.Fhir.MappingLanguage;
 using System.Text;
 
 namespace fml_processor;
@@ -9,11 +12,23 @@ namespace fml_processor;
 /// <summary>
 /// Custom FML creator based on input StructureDefinitions only
 /// </summary>
-public class FmlCreator
+public class MapGenerator
 {
     // Canonical indexed
     public Dictionary<string, StructureDefinition> Source = new Dictionary<string, StructureDefinition>();
     public Dictionary<string, StructureDefinition> Target = new Dictionary<string, StructureDefinition>();
+
+    /// <summary>
+    /// Resolver for the source FHIR version, used to walk the source StructureDefinitions via the
+    /// <see cref="FmlStructureDefinitionWalker"/> (mirroring the approach used in the FmlValidator).
+    /// </summary>
+    public IAsyncResourceResolver? SourceResolver { get; set; }
+
+    /// <summary>
+    /// Resolver for the target FHIR version, used to walk the target StructureDefinitions via the
+    /// <see cref="FmlStructureDefinitionWalker"/> (mirroring the approach used in the FmlValidator).
+    /// </summary>
+    public IAsyncResourceResolver? TargetResolver { get; set; }
 
     /// <summary>
     /// Appends known rules to the provided dictionary.
@@ -30,19 +45,19 @@ public class FmlCreator
         rules.Add(name, rule);
     }
 
-    private static Dictionary<string, IEnumerable<Rule>> CreateCustomRules()
-    {
-        var rules = new Dictionary<string, IEnumerable<Rule>>();
-        AppendKnownRules(rules, "Account.relatedAccount", "Account.relatedAccount as ra then { ra.account -> tgt.parent; ra.account -> tgt.guarantor as g, g.account = ra.account; } \"ra\";",
-            "maps to both Account.parent and Account.guarantor.account depending on the value of relatedAccount.relationship");
+    //private static Dictionary<string, IEnumerable<Rule>> CreateCustomRules()
+    //{
+    //    var rules = new Dictionary<string, IEnumerable<Rule>>();
+    //    AppendKnownRules(rules, "Account.relatedAccount", "Account.relatedAccount as ra then { ra.account -> tgt.parent; ra.account -> tgt.guarantor as g, g.account = ra.account; } \"ra\";",
+    //        "maps to both Account.parent and Account.guarantor.account depending on the value of relatedAccount.relationship");
 
-        AppendKnownRules(rules, "Consent.source[x]", "  // Source splits into separate properties based on type\n  src.source : Attachment -> tgt.sourceAttachment;  src.source : Reference -> tgt.sourceReference;");
-        AppendKnownRules(rules, "ActivityDefinition.dosage", "  src where (dosage.exists()) -> tgt.dosageInstruction as di then {\r\n    // each dosage goes into a new step, and the dosage is mapped to the component of that step\r\n    src.dosage as sd -> di.step as s, s.component = sd;\r\n  } \"mapDosageInstructions\";\r\n");
-        AppendKnownRules(rules, "RelatedArtifact.url", "src.url as u where (src.document.empt()) -> tgt.document as d, d.url = u \"setUrl\"; // need to check if this impacts existing document");
-        return rules;
-    }
+    //    AppendKnownRules(rules, "Consent.source[x]", "  // Source splits into separate properties based on type\n  src.source : Attachment -> tgt.sourceAttachment;  src.source : Reference -> tgt.sourceReference;");
+    //    AppendKnownRules(rules, "ActivityDefinition.dosage", "  src where (dosage.exists()) -> tgt.dosageInstruction as di then {\r\n    // each dosage goes into a new step, and the dosage is mapped to the component of that step\r\n    src.dosage as sd -> di.step as s, s.component = sd;\r\n  } \"mapDosageInstructions\";\r\n");
+    //    AppendKnownRules(rules, "RelatedArtifact.url", "src.url as u where (src.document.empt()) -> tgt.document as d, d.url = u \"setUrl\"; // need to check if this impacts existing document");
+    //    return rules;
+    //}
 
-    public Dictionary<string, IEnumerable<Rule>> KnownCustomRules = CreateCustomRules();
+    //public Dictionary<string, IEnumerable<Rule>> KnownCustomRules = CreateCustomRules();
 
     // Content now read from the configuration file not hard coded
     public HashSet<string> KnownMappings = new HashSet<string>(); 
@@ -79,6 +94,382 @@ public class FmlCreator
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Enumerates the elements of a StructureDefinition by walking its snapshot with the
+    /// <see cref="FmlStructureDefinitionWalker"/> (as done in the FmlValidator), rather than
+    /// reading the bare ElementDefinitions from the differential.
+    /// </summary>
+    /// <remarks>
+    /// The elements are returned in depth-first pre-order (parent before children), descending only
+    /// into elements that carry inline children (e.g. BackboneElement/Element). Elements that are
+    /// inherited from a base type (id, extension, modifierExtension, meta, ... and inherited datatype
+    /// content such as Quantity's value/unit) are skipped, because the generated group already
+    /// <c>extends</c> that base type which covers them. This mirrors the set of elements previously
+    /// obtained from <c>Differential.Element.Skip(1)</c>.
+    /// </remarks>
+    private static IEnumerable<ElementDefinition> WalkElements(StructureDefinition sd, IAsyncResourceResolver resolver)
+    {
+        var walker = new FmlStructureDefinitionWalker(sd, resolver);
+
+        // Type-less abstract roots (e.g. Base) have no walkable children; previously these produced
+        // an empty differential loop, so return an empty set rather than letting the walker throw.
+        if (!walker.Current.HasChildren)
+            return Enumerable.Empty<ElementDefinition>();
+
+        return WalkChildren(walker, resolver);
+    }
+
+    private static IEnumerable<ElementDefinition> WalkChildren(FmlStructureDefinitionWalker walker, IAsyncResourceResolver resolver)
+    {
+        foreach (var childNav in walker.Children())
+        {
+            // Skip elements that are inherited from a base type; the generated group extends that
+            // base so the inherited elements (id/extension/modifierExtension/meta/... and inherited
+            // datatype content) are already covered and must not be re-emitted.
+            if (!IsIntroducedHere(childNav))
+                continue;
+
+            yield return childNav.Current;
+
+            // Only descend into inline children (BackboneElement/Element); referenced datatypes are
+            // not expanded here (that is handled explicitly for differing types during mapping).
+            if (childNav.HasChildren)
+            {
+                var childWalker = new FmlStructureDefinitionWalker(childNav, resolver);
+                foreach (var descendant in WalkChildren(childWalker, resolver))
+                    yield return descendant;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines whether the element the navigator is positioned on was introduced by its own
+    /// StructureDefinition (as opposed to being inherited from a base type). Inherited elements are
+    /// covered by the group's <c>extends</c> base and are therefore not emitted.
+    /// </summary>
+    private static bool IsIntroducedHere(ElementDefinitionNavigator nav)
+    {
+        var basePath = nav.Current?.Base?.Path;
+
+        // Without base information we cannot tell it is inherited, so keep it (defensive).
+        if (string.IsNullOrEmpty(basePath))
+            return true;
+
+        var baseRootType = basePath.Contains('.') ? basePath.Substring(0, basePath.IndexOf('.')) : basePath;
+        return baseRootType == nav.StructureDefinition?.Name;
+    }
+
+    /// <summary>
+    /// Returns true when the element's primary type is a complex type: a resource/datatype (declared
+    /// in PascalCase) or an inline BackboneElement/Element. FHIR primitive types (e.g. string, code)
+    /// are declared in lowerCamelCase and return false.
+    /// </summary>
+    private static bool IsComplexType(ElementDefinition ed)
+    {
+        var code = ed.Type?.FirstOrDefault()?.Code;
+        if (string.IsNullOrEmpty(code))
+            return false;
+        if (code == "BackboneElement" || code == "Element")
+            return true;
+        return char.IsUpper(code[0]);
+    }
+
+    /// <summary>
+    /// Recursively expands the introduced (non-inherited) child elements of the named datatype
+    /// referenced by the given element, rewriting their paths so they are rooted at
+    /// <paramref name="parentPath"/>. This is used when a property's type differs between the source
+    /// and target versions (for example a BackboneElement that became the Availability datatype), so
+    /// that the datatype's properties - at any depth - can participate in the generated nested group
+    /// and be located by (possibly cross-level) renames.
+    /// </summary>
+    private static IEnumerable<ElementDefinition> ExpandType(ElementDefinition ed, IAsyncResourceResolver resolver, string parentPath)
+    {
+        var canonical = ed.Type?.FirstOrDefault()?.GetTypeProfile();
+        if (string.IsNullOrEmpty(canonical))
+            yield break;
+
+        var sd = resolver.FindStructureDefinitionAsync(canonical).GetAwaiter().GetResult();
+        if (sd == null)
+            yield break;
+
+        foreach (var child in WalkElements(sd, resolver))
+        {
+            // Child paths are rooted at the datatype name (e.g. "Availability.availableTime.
+            // availableStartTime"); re-root them under parentPath (e.g. the property path
+            // "Location.hoursOfOperation") preserving the nested remainder.
+            var relative = child.Path.Contains('.') ? child.Path.Substring(child.Path.IndexOf('.') + 1) : child.Path;
+            var clone = (ElementDefinition)child.DeepCopy();
+            clone.Path = parentPath + "." + relative;
+            yield return clone;
+        }
+    }
+
+    /// <summary>
+    /// Produces a detached copy of a custom-rule <see cref="Rule"/> by round-tripping it through the
+    /// serializer/parser. The custom-rule <see cref="GroupDeclaration"/> objects are shared across all
+    /// generated maps (they live in <c>_customRules</c>), so the actual rule instances must never be
+    /// added directly to a generated group - each generated map needs its own independent copy.
+    /// The copy's hidden tokens are normalized (see <see cref="SanitizeClonedRule"/>) so the rule
+    /// adopts the generated map's formatting rather than dragging in whitespace/comment noise from its
+    /// original position in the custom-rules file.
+    /// </summary>
+    private static Rule CloneRule(Rule rule)
+    {
+        var sb = new StringBuilder();
+        FmlSerializer.SerializeRule(sb, rule, 1);
+        var clone = FmlParser.ParseRule(sb.ToString());
+        SanitizeClonedRule(clone);
+        return clone;
+    }
+
+    /// <summary>
+    /// Normalizes the hidden (whitespace/comment) tokens on a cloned custom rule and its whole
+    /// sub-tree so it renders cleanly inside a generated group. The custom-rules file is authored as
+    /// free-form text, and ANTLR attaches each line's trailing comment as a leading hidden token of
+    /// the following node; when such rules are injected/appended verbatim this produces stray
+    /// end-of-line marker comments (e.g. "// custom rule below"), blank lines, and extra spaces before
+    /// "->". This routine drops hoisted end-of-line comments and blank lines and strips whitespace-only
+    /// trailing tokens, while preserving genuine standalone comments (those that sit on their own line).
+    /// </summary>
+    private static void SanitizeClonedRule(Rule rule)
+    {
+        rule.LeadingHiddenTokens = CleanLeadingTokens(rule.LeadingHiddenTokens);
+        rule.TrailingHiddenTokens = StripWhitespaceOnlyTokens(rule.TrailingHiddenTokens);
+
+        foreach (var s in rule.Sources)
+        {
+            s.LeadingHiddenTokens = CleanLeadingTokens(s.LeadingHiddenTokens);
+            s.TrailingHiddenTokens = StripWhitespaceOnlyTokens(s.TrailingHiddenTokens);
+        }
+        foreach (var t in rule.Targets)
+        {
+            t.LeadingHiddenTokens = CleanLeadingTokens(t.LeadingHiddenTokens);
+            t.TrailingHiddenTokens = StripWhitespaceOnlyTokens(t.TrailingHiddenTokens);
+        }
+
+        if (rule.Dependent != null)
+        {
+            rule.Dependent.LeadingHiddenTokens = CleanLeadingTokens(rule.Dependent.LeadingHiddenTokens);
+            foreach (var inv in rule.Dependent.Invocations)
+            {
+                inv.LeadingHiddenTokens = CleanLeadingTokens(inv.LeadingHiddenTokens);
+                inv.TrailingHiddenTokens = StripWhitespaceOnlyTokens(inv.TrailingHiddenTokens);
+            }
+            foreach (var nested in rule.Dependent.Rules)
+                SanitizeClonedRule(nested);
+        }
+    }
+
+    /// <summary>
+    /// Cleans a list of leading hidden tokens: drops "hoisted" end-of-line comments (a comment
+    /// preceded by whitespace that contains no newline - i.e. it was a trailing comment on the
+    /// previous line that ANTLR re-attached here), reduces the initial whitespace to just its indent
+    /// (removing leading newlines/blank lines so the node lines up under the serializer's per-node
+    /// newline), and collapses blank lines between any preserved standalone comments. Returns null when
+    /// nothing remains so the serializer falls back to its default indent.
+    /// </summary>
+    private static List<HiddenToken>? CleanLeadingTokens(List<HiddenToken>? tokens)
+    {
+        if (tokens == null || tokens.Count == 0)
+            return null;
+
+        var result = new List<HiddenToken>();
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var tok = tokens[i];
+            if (tok.IsComment)
+            {
+                // A comment whose immediately preceding token is whitespace without a newline was a
+                // trailing (end-of-line) comment on the previous line - drop it and that space.
+                var prev = result.Count > 0 ? result[result.Count - 1] : null;
+                if (prev != null && prev.IsWhitespace && !prev.Text.Contains('\n'))
+                {
+                    result.RemoveAt(result.Count - 1);
+                    continue;
+                }
+            }
+            result.Add(tok);
+        }
+
+        if (result.Count == 0)
+            return null;
+
+        // Reduce the first whitespace token to just its indent (text after the last newline), so the
+        // node aligns under the newline the serializer emits after the previous node instead of
+        // introducing a blank line.
+        if (result[0].IsWhitespace)
+        {
+            var text = result[0].Text;
+            int nl = text.LastIndexOf('\n');
+            var indent = nl >= 0 ? text.Substring(nl + 1) : text;
+            if (indent.Length == 0)
+                result.RemoveAt(0);
+            else
+                result[0] = new HiddenToken { TokenType = result[0].TokenType, Text = indent };
+        }
+
+        // Collapse blank lines within any remaining whitespace tokens (e.g. after a standalone
+        // comment) down to a single newline.
+        for (int i = 0; i < result.Count; i++)
+        {
+            if (result[i].IsWhitespace && result[i].Text.Contains('\n'))
+            {
+                var collapsed = System.Text.RegularExpressions.Regex.Replace(
+                    result[i].Text, "(\\r?\\n)([ \\t]*\\r?\\n)+", "$1");
+                if (collapsed != result[i].Text)
+                    result[i] = new HiddenToken { TokenType = result[i].TokenType, Text = collapsed };
+            }
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    /// <summary>
+    /// Removes whitespace-only hidden tokens (keeping comment tokens), used for trailing token lists
+    /// so stray spaces captured before "->" or after a source/target don't survive into the output.
+    /// </summary>
+    private static List<HiddenToken>? StripWhitespaceOnlyTokens(List<HiddenToken>? tokens)
+    {
+        if (tokens == null || tokens.Count == 0)
+            return null;
+        var kept = tokens.Where(t => !t.IsWhitespace).ToList();
+        return kept.Count == 0 ? null : kept;
+    }
+
+    /// <summary>
+    /// Collects the (relative) target element names written by a custom rule, including any nested
+    /// then-rules, so the corresponding target elements can be "marked off" and not reported as
+    /// unpopulated. Only <c>tgt</c>-context targets are collected (the group's target root).
+    /// </summary>
+    private static IEnumerable<string> CollectTargetElementNames(Rule rule)
+    {
+        foreach (var t in rule.Targets)
+        {
+            if (!string.IsNullOrEmpty(t.Element) && t.Context == "tgt")
+                yield return t.Element!.Replace("[x]", "");
+        }
+        if (rule.Dependent?.Rules != null)
+        {
+            foreach (var nested in rule.Dependent.Rules)
+                foreach (var name in CollectTargetElementNames(nested))
+                    yield return name;
+        }
+    }
+
+    /// <summary>
+    /// If the <paramref name="currentGroup"/> has an attached custom-rule group (from the custom
+    /// rules .fml file) that defines one or more rules whose source matches the element currently
+    /// being processed, inject those rules into the group in place of the rule that would normally be
+    /// generated, and mark off the target elements they write so they are not later reported as
+    /// unpopulated. A matched custom rule that has no targets is omitted entirely (the property is
+    /// intentionally dropped). Returns <c>true</c> when a matching custom rule was found (whether it
+    /// produced output or was omitted), signalling the caller to skip normal generation.
+    /// </summary>
+    private static bool TryInjectCustomGroupRules(
+        GroupDeclaration currentGroup,
+        string targetRootPath,
+        string currentElementPath,
+        HashSet<Rule> consumedCustomRules,
+        List<ElementDefinition> missedTargetElements)
+    {
+        if (!currentGroup.HasAnnotation<GroupDeclaration>())
+            return false;
+
+        var customGroup = currentGroup.Annotation<GroupDeclaration>();
+        if (customGroup?.Rules == null || customGroup.Rules.Count == 0)
+            return false;
+
+        var sourceLeaf = (currentElementPath.Contains(".")
+            ? currentElementPath.Substring(currentElementPath.LastIndexOf(".") + 1)
+            : currentElementPath).Replace("[x]", "");
+
+        var matched = customGroup.Rules
+            .Where(r => r.Sources.Any(s => (s.Element ?? string.Empty).Replace("[x]", "") == sourceLeaf))
+            .ToList();
+        if (matched.Count == 0)
+            return false;
+
+        foreach (var customRule in matched)
+        {
+            if (!consumedCustomRules.Add(customRule))
+                continue; // already injected via another of its source properties
+
+            // A rule with no targets intentionally drops the property - omit it entirely.
+            if (customRule.Targets.Any())
+                currentGroup.Rules.Add(CloneRule(customRule));
+
+            // Mark off the target elements the custom rule writes so they aren't reported as
+            // "not populated". Match on the target path relative to the group's target root and,
+            // as a fallback, on the leaf name.
+            foreach (var tgtName in CollectTargetElementNames(customRule))
+            {
+                var tePath = (targetRootPath + "." + tgtName).Replace("[x]", "");
+                missedTargetElements.RemoveAll(te =>
+                    te.Path.Replace("[x]", "") == tePath
+                    || (te.Path.Contains(".")
+                            ? te.Path.Substring(te.Path.LastIndexOf(".") + 1)
+                            : te.Path).Replace("[x]", "") == tgtName);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Appends any custom-rule-group rules that were not consumed during the element walk to the end
+    /// of their corresponding generated group. These are the "leftover" rules described by the
+    /// custom-rules file semantics - rules that add new mappings rather than replacing the rule for a
+    /// specific source property (e.g. an aggregating <c>src where (...) -> ...</c> rule whose source
+    /// is the whole context and therefore never matches a single iterated element). Pure
+    /// source-marker rules (no targets and no dependent) that were never matched are skipped. The
+    /// target elements written by appended rules are marked off so they aren't reported as
+    /// unpopulated.
+    /// </summary>
+    private static void AppendLeftoverCustomRules(
+        FmlStructureMap fml,
+        Dictionary<GroupDeclaration, string> customGroupTargetRoots,
+        HashSet<Rule> consumedCustomRules,
+        List<ElementDefinition> missedTargetElements)
+    {
+        foreach (var genGroup in fml.Groups)
+        {
+            if (!genGroup.HasAnnotation<GroupDeclaration>())
+                continue;
+
+            var customGroup = genGroup.Annotation<GroupDeclaration>();
+            if (customGroup?.Rules == null)
+                continue;
+
+            var targetRoot = customGroupTargetRoots.TryGetValue(genGroup, out var root)
+                ? root
+                : (genGroup.Parameters.FirstOrDefault(p => p.Mode == ParameterMode.Target)?.Name ?? "tgt");
+
+            foreach (var customRule in customGroup.Rules)
+            {
+                if (consumedCustomRules.Contains(customRule))
+                    continue;
+
+                // A rule that neither writes a target nor invokes/nests a dependent is a bare
+                // source marker; if it was never matched to a property, there's nothing to append.
+                if (!customRule.Targets.Any() && customRule.Dependent == null)
+                    continue;
+
+                consumedCustomRules.Add(customRule);
+                genGroup.Rules.Add(CloneRule(customRule));
+
+                foreach (var tgtName in CollectTargetElementNames(customRule))
+                {
+                    var tePath = (targetRoot + "." + tgtName).Replace("[x]", "");
+                    missedTargetElements.RemoveAll(te =>
+                        te.Path.Replace("[x]", "") == tePath
+                        || (te.Path.Contains(".")
+                                ? te.Path.Substring(te.Path.LastIndexOf(".") + 1)
+                                : te.Path).Replace("[x]", "") == tgtName);
+                }
+            }
+        }
     }
 
     private FmlStructureMap? CreateMap(StructureDefinition sourceSd, StructureDefinition targetSd)
@@ -128,28 +519,43 @@ public class FmlCreator
         });
         group.Parameters[0].SetAnnotation(new StructureDefAnnotation(sourceSd));
         group.Parameters[1].SetAnnotation(new StructureDefAnnotation(targetSd));
-        group.Extends = sourceSd.BaseDefinition?.Replace("http://hl7.org/fhir/StructureDefinition/", "");
+        group.Extends = PascalCase(sourceSd.BaseDefinition?.Replace("http://hl7.org/fhir/StructureDefinition/", ""));
         if (group.Extends == "Base")
             group.Extends = null;
         if (group.Extends != null)
             group.TypeMode = GroupTypeMode.TypePlus;
 
         var customRuleKey = GetCustomRuleName(group);
+        // Maps a generated group to the target path its rule targets are relative to, so that
+        // leftover custom rules appended after the walk can have their populated targets marked off.
+        var customGroupTargetRoots = new Dictionary<GroupDeclaration, string>();
         if (_customRules.ContainsKey(customRuleKey))
         {
             group.SetAnnotation(_customRules[customRuleKey]);
+            customGroupTargetRoots[group] = targetSd.Name;
         }
+
+        // Walk the source and target StructureDefinitions using the StructureDefinitionWalker
+        // (as is done in the FmlValidator) rather than reading the bare differential elements.
+        var sourceElements = WalkElements(sourceSd, SourceResolver!).ToList();
+        var targetElements = WalkElements(targetSd, TargetResolver!).ToList();
 
         // for now just do a simple copy of all matching elements by name
         var missedSourceElements = new List<ElementDefinition>();
-        var missedTargetElements = targetSd.Differential.Element.Skip(1).ToList();
+        var missedTargetElements = targetElements.ToList();
+        // Custom rules injected from a group's attached custom-rule group are tracked here (by
+        // reference) so a rule that reads several source properties is only injected once.
+        var consumedCustomRules = new HashSet<Rule>();
         Stack<GroupDeclaration> groupStack = new Stack<GroupDeclaration>();
-        Stack<string> groupPathStack = new Stack<string>(); // Track the full path for each group
+        Stack<string> groupPathStack = new Stack<string>(); // Track the full source path for each group
+        Stack<string> groupTargetPathStack = new Stack<string>(); // Track the full target path for each group
         groupStack.Push(group);
         groupPathStack.Push(sourceSd.Name); // Root level is the resource name
+        groupTargetPathStack.Push(targetSd.Name);
 
-        foreach (var se in sourceSd.Differential.Element.Skip(1))
+        for (int i = 0; i < sourceElements.Count; i++)
         {
+            var se = sourceElements[i];
             // Calculate the parent path for this element
             var currentElementPath = se.Path;
             var parentPath = currentElementPath.Contains(".") ? currentElementPath.Substring(0, currentElementPath.LastIndexOf(".")) : sourceSd.Name;
@@ -159,17 +565,19 @@ public class FmlCreator
             {
                 groupStack.Pop();
                 groupPathStack.Pop();
+                groupTargetPathStack.Pop();
             }
 
-            // check if there's a custom rule for this element first
-            if (KnownCustomRules.ContainsKey(currentElementPath))
+            if (TryInjectCustomGroupRules(groupStack.Peek(), groupTargetPathStack.Peek(), currentElementPath, consumedCustomRules, missedTargetElements))
             {
-                var ruleCustoms = KnownCustomRules[currentElementPath];
-                groupStack.Peek().Rules.AddRange(ruleCustoms);
+                // The current group's attached custom-rule group defines a rule whose source matches
+                // this element; those rules were injected (or intentionally omitted when a matched
+                // rule had no targets) in place of the rule we would normally generate. The source is
+                // considered handled, so fall through without adding it to the missed-source list.
             }
             else
             {
-                var matchingTe = targetSd.Differential.Element.FirstOrDefault(te =>
+                var matchingTe = targetElements.FirstOrDefault(te =>
                         te.Path.Replace("[x]", "") == se.Path.Replace("[x]", "")
                         || KnownMappings.Contains($"{se.Path.Replace("[x]", "")} -> {te.Path.Replace("[x]", "")}")
                         // || KnownMappings.Contains($"{te.Path.Replace("[x]", "")} -> {se.Path.Replace("[x]", "")}") // reverse mapping too (from the previous direction)
@@ -190,10 +598,20 @@ public class FmlCreator
                         Context = "src",
                         Element = se.Path.Contains(".") ? se.Path.Substring(se.Path.LastIndexOf(".") + 1).Replace("[x]", "") : se.Path.Replace("[x]", "")
                     });
+                    // Render the target relative to the current group's target root so cross-level
+                    // renames (e.g. Location.hoursOfOperation.openingTime ->
+                    // Location.hoursOfOperation.availableTime.availableStartTime) become a dotted
+                    // target path (availableTime.availableStartTime) within the group.
+                    var targetRootPath = groupTargetPathStack.Peek();
+                    string targetElementName;
+                    if (matchingTe.Path.StartsWith(targetRootPath + "."))
+                        targetElementName = matchingTe.Path.Substring(targetRootPath.Length + 1).Replace("[x]", "");
+                    else
+                        targetElementName = matchingTe.Path.Contains(".") ? matchingTe.Path.Substring(matchingTe.Path.LastIndexOf(".") + 1).Replace("[x]", "") : matchingTe.Path.Replace("[x]", "");
                     rule.Targets.Add(new RuleTarget
                     {
                         Context = "tgt",
-                        Element = matchingTe.Path.Contains(".") ? matchingTe.Path.Substring(matchingTe.Path.LastIndexOf(".") + 1).Replace("[x]", "") : matchingTe.Path.Replace("[x]", "")
+                        Element = targetElementName
                     });
 
                     bool displayCardinality = false;
@@ -209,8 +627,19 @@ public class FmlCreator
                         mappingWarningMessage = " // Warning: source repeating, target single-valued";
                     }
 
-                    // these types need to go into their own group and invocation
-                    if (se.Type.Any(t => t.Code == "BackboneElement" || t.Code == "Element"))
+                    // these types need to go into their own group and invocation.
+                    // A nested group is required when either side is an inline BackboneElement/Element.
+                    // When exactly one side is an inline backbone and the other is a named complex
+                    // datatype (e.g. Location.hoursOfOperation changed from a BackboneElement to the
+                    // Availability datatype), the types differ so we walk into the datatype side and
+                    // surface its properties (as opposed to same-typed elements where the type's own
+                    // group/base already covers the internals).
+                    bool sourceIsBackbone = se.Type.Any(t => t.Code == "BackboneElement" || t.Code == "Element");
+                    bool targetIsBackbone = matchingTe.Type.Any(t => t.Code == "BackboneElement" || t.Code == "Element");
+                    bool differingTypeDescent = (sourceIsBackbone ^ targetIsBackbone)
+                        && IsComplexType(se) && IsComplexType(matchingTe);
+
+                    if (sourceIsBackbone || (targetIsBackbone && differingTypeDescent))
                     {
                         rule.Sources[0].Variable = "s";
                         rule.Targets[0].Variable = "t";
@@ -229,11 +658,12 @@ public class FmlCreator
                                 ]
                         });
 
-                        // Add a new group
+                        // Add a new group. It extends the base type of whichever side is the inline
+                        // backbone (the datatype side does not provide a usable "extends" base here).
                         var groupBackbone = new GroupDeclaration()
                         {
                             Name = groupName,
-                            Extends = se.Type.First().Code
+                            Extends = sourceIsBackbone ? se.Type.First().Code : matchingTe.Type.First().Code
                         };
                         groupBackbone.Parameters.Add(new GroupParameter
                         {
@@ -250,6 +680,7 @@ public class FmlCreator
                         if (_customRules.ContainsKey(customRuleKey))
                         {
                             groupBackbone.SetAnnotation(_customRules[customRuleKey]);
+                            customGroupTargetRoots[groupBackbone] = matchingTe.Path;
                         }
 
                         // always display cardinality for groups
@@ -279,8 +710,45 @@ public class FmlCreator
                         }
 
                         groupStack.Push(groupBackbone);
-                        groupPathStack.Push(currentElementPath); // Push the full path of this BackboneElement
+                        groupPathStack.Push(currentElementPath); // Push the full source path of this BackboneElement
+                        groupTargetPathStack.Push(matchingTe.Path); // Push the matched target path for this group
                         fml.Groups.Add(groupBackbone);
+
+                        // When the source and target types differ (e.g. a BackboneElement on one side
+                        // and a named datatype such as Availability on the other), walk into the
+                        // datatype side and surface its introduced properties so they participate in
+                        // the nested group's mapping (and unmapped ones are reported for review).
+                        if (differingTypeDescent)
+                        {
+                            groupBackbone.SetAnnotation(new NeedsReviewAnnotation());
+                            fml.SetAnnotation(new NeedsReviewAnnotation());
+                            rule.SetAnnotation(new NeedsReviewAnnotation());
+                            rule.TrailingHiddenTokens ??= new List<HiddenToken>();
+                            rule.TrailingHiddenTokens.Add(new HiddenToken()
+                            {
+                                TokenType = FmlMappingLexer.LINE_COMMENT,
+                                Text = $" // Warning: type changed ({String.Join(",", se.Type?.Select(t => t.Code))} -> {String.Join(",", matchingTe.Type?.Select(t => t.Code))})"
+                            });
+
+                            if (!sourceIsBackbone)
+                            {
+                                // The source is the datatype: splice its (recursively expanded)
+                                // children into the source stream so they are visited within the
+                                // group just pushed.
+                                var expandedSource = ExpandType(se, SourceResolver!, se.Path).ToList();
+                                sourceElements.InsertRange(i + 1, expandedSource);
+                            }
+                            if (!targetIsBackbone)
+                            {
+                                // The target is the datatype: add its (recursively expanded) children
+                                // to the pool so source children can match by name or via renames
+                                // (including cross-level renames into nested datatype properties), and
+                                // report any that go unmapped.
+                                var expandedTarget = ExpandType(matchingTe, TargetResolver!, matchingTe.Path).ToList();
+                                targetElements.AddRange(expandedTarget);
+                                missedTargetElements.AddRange(expandedTarget);
+                            }
+                        }
                     }
                     else
                     {
@@ -355,6 +823,12 @@ public class FmlCreator
                 }
             }
         }
+
+        // Append any leftover custom rules. Per the custom-rules file semantics, rules whose source
+        // matched a generated property replace that property's rule (handled during the walk); any
+        // remaining custom rules (for example a rule whose source is the whole context, such as a
+        // "src where (...) -> ..." aggregation) are appended to the end of the generated group.
+        AppendLeftoverCustomRules(fml, customGroupTargetRoots, consumedCustomRules, missedTargetElements);
 
         if (missedSourceElements.Any())
         {
@@ -568,7 +1042,12 @@ public class FmlCreator
         return resourceType + fhirVersion;
     }
 
-    public static string PascalCase(string input)
+	/// <summary>
+	/// Converts a string to PascalCase, removing underscores, spaces, hyphens, and dots, and capitalizing the first letter of each word.
+	/// </summary>
+	/// <param name="input"></param>
+	/// <returns></returns>
+	public static string PascalCase(string input)
     {
         if (string.IsNullOrEmpty(input))
             return input;
@@ -930,18 +1409,25 @@ public class FmlCreator
 
     string GetCustomRuleName(GroupDeclaration group)
     {
+        // Build a normalized signature key from the parameter properties directly rather than
+        // via the serializer, so that hidden whitespace tokens carried by parsed custom-rule
+        // groups don't cause a mismatch with the generated groups (both must produce the same key).
         var sb = new StringBuilder();
         sb.Append(group.Name);
-
-        // Parameters
         sb.Append("(");
         for (int i = 0; i < group.Parameters.Count; i++)
         {
             if (i > 0)
-            {
                 sb.Append(", ");
+            var p = group.Parameters[i];
+            sb.Append(p.Mode == ParameterMode.Source ? "source" : "target");
+            sb.Append(" ");
+            sb.Append(p.Name);
+            if (!string.IsNullOrEmpty(p.Type))
+            {
+                sb.Append(" : ");
+                sb.Append(p.Type);
             }
-            FmlSerializer.SerializeGroupParameter(sb, group.Parameters[i]);
         }
         sb.Append(")");
         return sb.ToString();
